@@ -1,0 +1,266 @@
+Vehicle Physics Config - Changelog
+
+
+v1.3 (2026-05-10)
+
+  FIXES:
+
+    - Removed external Python configurator from Nexus package — was triggering
+      Nexus quarantine due to bat file in archive. CET mod now ships standalone.
+    - Configurator available separately on GitHub as standalone exe.
+
+  PACKAGING:
+
+    - Nexus release is now CET-only: single init.lua, no executables, no scripts.
+    - Clean archive structure: just the CET mod folder + README + CHANGELOG.
+    - No quarantine risk — nothing executable in the Nexus package.
+
+
+v1.2 (2026-04-20)
+
+  FIXES:
+
+    - Removed .bat launcher — was triggering Nexus quarantine.
+      Configurator is now a standalone .exe, no Python install needed.
+    - Fixed Vortex install path — CET mod now uses full game-relative path
+      (bin/x64/plugins/cyber_engine_tweaks/mods/VehiclePhysicsConfig/).
+      Vortex auto-detects the correct install location instead of dumping
+      files in the game root.
+
+  PACKAGING:
+
+    - Configurator bundled as standalone Windows exe via PyInstaller.
+      No Python, no pip, no dependencies — just run VehiclePhysicsConfig.exe.
+    - Added build.py script for consistent release packaging.
+    - README updated with Vortex and manual install instructions.
+
+
+v1.1 (2026-04-12)
+
+  Vehicle database expansion — 12 to 40 vehicles.
+  All new TweakDB IDs verified against Red Modding Wiki and Steam spawn guide.
+  Full coverage of player-obtainable vehicles including Phantom Liberty.
+
+  NEW VEHICLES (28):
+
+    Hypercar (2):
+      - Herrera Riptide             Vehicle.v_sport1_herrera_riptide
+      - Quadra Sport R-7            Vehicle.v_sport1_quadra_sport_r7
+
+    Sport (5):
+      - Quadra Type-66 (base)       Vehicle.v_sport2_quadra_type66
+      - Quadra Type-66 Javelina     Vehicle.v_sport2_quadra_type66_nomad
+      - Quadra Type-66 Cthulhu      Vehicle.v_sport2_quadra_type66_02
+      - Mizutani Shion (base)       Vehicle.v_sport2_mizutani_shion
+      - Mizutani Shion Coyote       Vehicle.v_sport2_mizutani_shion_nomad
+
+    Truck (4):
+      - Thorton Colby CX410 Butte   Vehicle.v_standard25_thorton_colby_pickup
+      - Thorton Mackinaw Beast       Vehicle.v_standard3_thorton_mackinaw_02
+      - Kaukaz Bratsk U4020          Vehicle.v_utility4_kaukaz_bratsk
+      - Militech Hellhound           Vehicle.v_standard3_militech_hellhound
+
+    Luxury (3):
+      - Chevillon Emperor Ragnar     Vehicle.v_standard3_chevalier_emperor
+      - Chevillon Thrax Jefferson    Vehicle.v_standard2_chevalier_thrax
+      - Villefort DeLeon             Vehicle.v_sport2_villefort_deleon
+
+    Economy (11):
+      - Thorton Colby C240T          Vehicle.v_standard2_thorton_colby
+      - Thorton Galena G240          Vehicle.v_standard2_thorton_galena
+      - Thorton Galena Rattler       Vehicle.v_standard2_thorton_galena_nomad
+      - Thorton Merrimac             Vehicle.v_standard25_thorton_merrimac
+      - Villefort Cortes Valor       Vehicle.v_standard2_villefort_cortes
+      - Villefort Columbus V340-F    Vehicle.v_standard25_villefort_columbus
+      - Makigai MaiMai P126          Vehicle.v_standard2_makigai_maimai
+      - Makigai Tanishi              Vehicle.v_standard3_makigai_tanishi
+      - Archer Hella EC-D I360       Vehicle.v_standard2_archer_hella
+      - Archer Quartz Bandit         Vehicle.v_standard2_archer_quartz_nomad
+      - Mahir Supron FS3             Vehicle.v_standard25_mahir_supron
+      - Mizutani Hozuki              Vehicle.v_standard2_mizutani_hozuki
+
+    Bike (3):
+      - Brennan Apollo               Vehicle.v_sportbike3_brennan_apollo
+      - Yaiba Semimaru               Vehicle.v_sport1_yaiba_semimaru
+
+  ID CORRECTIONS:
+
+    Six TweakDB IDs were corrected during audit. All verified against the
+    Red Modding Wiki entity list and Steam community spawn code guide.
+
+    - Chevillon manufacturer: game files use "chevalier" (dev-era name),
+      not "chevilion". Both Emperor and Thrax IDs corrected.
+    - Thorton Colby CX410 Butte: tier is standard25, not standard3.
+      Confirmed via spawn code v_standard25_thorton_colby_pickup_player.
+    - Thorton Mackinaw Beast: suffix is _02, not _nomad. No _nomad record
+      exists in the spawn data. Confirmed via v_standard3_thorton_mackinaw_02_player.
+    - Kaukaz Bratsk U4020: tier is utility4, not standard3.
+      Confirmed via wiki entity list v_utility4_kaukaz_bratsk.
+    - Brennan Apollo: tier is sportbike3, not sportbike1.
+      Confirmed via spawn code v_sportbike3_brennan_apollo_player.
+
+  UI CHANGES:
+
+    - Shortened 4 vehicle display names to prevent sidebar clipping at 195px:
+        Chevillon Emperor 620 Ragnar  ->  Chevillon Emperor Ragnar
+        Chevillon Thrax 388 Jefferson  ->  Chevillon Thrax Jefferson
+        Villefort Cortes V5000 Valor   ->  Villefort Cortes Valor
+        Villefort Columbus V340-F Freight  ->  Villefort Columbus V340-F
+
+  DOCUMENTATION:
+
+    - README updated: 40 vehicles, corrected parameter count (24, not 26),
+      added Configurator install steps, added Profiles section
+    - Package now includes Configurator alongside CET mod
+
+  KNOWN ISSUES:
+
+    - Default physics values for all 28 new vehicles are ESTIMATES based on
+      vehicle class and weight, not pulled from TweakDB diagnostics. Verify
+      and adjust in-game using the configurator.
+    - Kaukaz Bratsk (utility4) is not player-purchasable — you must steal
+      one from the street to test physics changes on it.
+    - The standalone CET Lua export (EXPORT CET LUA button) only maps 14/24
+      parameters. Use PUSH LIVE instead — it handles all 24 correctly.
+      This is a pre-existing v1.0 issue, not introduced in v1.1.
+
+  VERIFICATION:
+
+    Sources used for TweakDB ID verification:
+    - Red Modding Wiki: wiki.redmodding.org/cyberpunk-2077-modding
+      (Cheat Sheet: Vehicles — entity-derived TweakDB names)
+    - Steam Community: guide ID 3097320206
+      (Console vehicle spawn codes — confirmed _player record names)
+    - Cyberpunk Wiki (Fandom): variant cross-referencing
+      (Cthulhu = _02, Javelina = _nomad, Coyote = _shion_nomad)
+
+
+v1.0 (2026-04-07)
+
+  Initial release.
+
+  CONFIGURATOR:
+
+    Desktop application built with Python + customtkinter.
+    Cyberpunk-themed dark UI with scrollable sidebar and slider panel.
+
+    - Vehicle selector sidebar with class badges (Hypercar, Sport, etc.)
+    - 24 slider controls with live value display
+    - Changed values highlighted green, stock values in amber
+    - 6 preset buttons apply multiplier profiles against stock defaults
+    - Save/Load profile system (JSON files in profiles/ directory)
+    - Apply To All: calculate tuning ratios from current vehicle and
+      propagate proportionally across all other vehicles
+
+  LIVE TUNING:
+
+    Real-time bridge between the desktop configurator and the game.
+
+    - SET CET PATH: point to your CET mods folder (saved in settings.json)
+    - PUSH LIVE: generate init.lua with current slider values baked in
+    - AUTO mode: every slider change immediately writes a new init.lua
+    - Workflow: push from configurator -> reload mods in CET -> resummon vehicle
+
+  CET MOD (init.lua):
+
+    Single Lua file deployed to CET mods folder. Applies TweakDB changes
+    on game init and provides an in-game ImGui overlay.
+
+    - Reads CONFIG table (values embedded by configurator)
+    - Iterates all configured vehicles, applies SetFlat + Update per record
+    - Resolves VehDriveModelData, VehEngineData, WheelSetup chains
+    - Rear wheel preset auto-detection: tries BackPreset() first, falls
+      back to RearPreset(), then shares FrontPreset() if neither exists
+    - Every write logged with before/after values and OK/MISS status
+    - Error handling via pcall — one bad vehicle doesn't block the rest
+    - In-game overlay shows: active status, vehicle count, apply log,
+      last error, and resummon reminder
+
+  PARAMETERS (24):
+
+    Mass & Dynamics (3):
+      total_mass          -> TweakDB: total_mass
+      chassis_mass        -> TweakDB: chassis_mass
+      air_resistance      -> TweakDB: airResistanceFactor
+
+    Engine (3):
+      max_torque          -> TweakDB: engineMaxTorque
+      resistance_torque   -> TweakDB: resistanceTorque
+      max_rpm             -> TweakDB: maxRPM
+
+    Suspension Front (4):
+      susp_front_spring   -> TweakDB: springStiffness (FrontPreset)
+      susp_front_damp     -> TweakDB: springDamping (FrontPreset)
+      susp_front_rebound  -> TweakDB: springReboundDamping (FrontPreset)
+      susp_front_antiroll -> TweakDB: swaybarStiffness (FrontPreset)
+
+    Suspension Rear (4):
+      susp_rear_spring    -> TweakDB: springStiffness (BackPreset)
+      susp_rear_damp      -> TweakDB: springDamping (BackPreset)
+      susp_rear_rebound   -> TweakDB: springReboundDamping (BackPreset)
+      susp_rear_antiroll  -> TweakDB: swaybarStiffness (BackPreset)
+
+    Tires (4):
+      tire_front_lat      -> TweakDB: frictionMulLateral (FrontPreset)
+      tire_front_long     -> TweakDB: frictionMulLongitudinal (FrontPreset)
+      tire_rear_lat       -> TweakDB: frictionMulLateral (BackPreset)
+      tire_rear_long      -> TweakDB: frictionMulLongitudinal (BackPreset)
+
+    Steering (3):
+      steer_turn_add      -> TweakDB: wheelTurnMaxAddPerSecond
+      steer_turn_sub      -> TweakDB: wheelTurnMaxSubPerSecond
+      steer_assist        -> TweakDB: perfectSteeringFactor
+
+    Braking (3):
+      brake_front         -> TweakDB: maxBrakingTorque (FrontPreset)
+      brake_rear          -> TweakDB: maxBrakingTorque (BackPreset)
+      brake_handbrake     -> TweakDB: handbrakeBrakingTorque
+
+  PRESETS (6):
+
+    Stock       No multipliers — reset to game defaults
+    Realistic   +5% mass, -10% torque, +20% resistance, -20% tire grip,
+                -15% steering speed, -10% braking
+    Sport       -5% mass, +10% torque, +20% front spring, +10% tire grip,
+                +15% steering, +15% braking
+    Drift       Loose rear tires (-45% lat), stiff front, +30% steering,
+                +40% handbrake, -30% rear brake
+    Track       -10% mass, -20% air resistance, +15% torque, +40% springs,
+                +30% damping, +20% tire grip, stiff anti-roll
+    Offroad     +10% mass, -30% springs, -40% anti-roll, +5% tire grip,
+                -10% steering speed, soft damping
+
+  VEHICLES (12):
+
+    Hypercar:
+      - Rayfield Caliburn            Vehicle.v_sport1_rayfield_caliburn
+      - Rayfield Aerondight          Vehicle.v_sport1_rayfield_aerondight
+
+    Sport:
+      - Quadra Type-66 Avenger       Vehicle.v_sport2_quadra_type66_avenger
+      - Quadra Turbo-R V-Tech        Vehicle.v_sport1_quadra_turbo_r_v_tech
+      - Mizutani Shion MZ2           Vehicle.v_sport2_mizutani_shion_mz2
+      - Porsche 911 Turbo            Vehicle.v_sport2_porsche_911turbo
+      - Herrera Outlaw GTS           Vehicle.v_sport2_herrera_outlaw_gts
+
+    Truck:
+      - Thorton Mackinaw MTL1        Vehicle.v_standard3_thorton_mackinaw_mtl1
+
+    Luxury:
+      - Villefort Alvarado           Vehicle.v_standard3_villefort_alvarado
+
+    Economy:
+      - Archer Quartz EC-T2          Vehicle.v_standard2_archer_quartz
+
+    Bike:
+      - Yaiba Kusanagi CT-3X         Vehicle.v_sportbike2_yaiba_kusanagi
+      - Arch Nazare                  Vehicle.v_sportbike1_arch_nazare
+
+  TECHNICAL:
+
+    - Stack: Python 3.10+ / customtkinter (configurator), Lua (CET mod)
+    - TweakDB modification: SetFlat() + Update() pattern — runtime only
+    - Record chain: Vehicle -> VehDriveModelData -> VehEngineData / WheelSetup
+    - No game file replacement, no archive patching, no save file risk
+    - Compatible with Cyberpunk 2077 2.0+ and Phantom Liberty
+    - Requires: Cyber Engine Tweaks (CET)
