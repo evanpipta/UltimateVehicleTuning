@@ -1,4 +1,4 @@
--- CP2077 Vehicle Physics Config 
+-- Ultimate Vehicle Tuning
 -- Self-contained CET UI. Reads live TweakDB values, no external exe required.
 
 local VEHICLES = {
@@ -122,7 +122,7 @@ local function discoverOfficialVehicles()
         return TweakDB:GetFlat(TweakDBID.new("Vehicle.vehicle_list.list"))
     end)
     if not ok or type(list) ~= "table" then
-        print("[VehiclePhysicsConfig] Could not read Vehicle.vehicle_list.list; using built-in roster.")
+        print("[UltimateVehicleTuning] Could not read Vehicle.vehicle_list.list; using built-in roster.")
         return
     end
 
@@ -141,7 +141,7 @@ local function discoverOfficialVehicles()
             added = added + 1
         end
     end
-    print("[VehiclePhysicsConfig] Loaded " .. #VEHICLES ..
+    print("[UltimateVehicleTuning] Loaded " .. #VEHICLES ..
         " player vehicle physics entries (" .. added .. " discovered).")
 end
 
@@ -1270,34 +1270,6 @@ local function applyCurrent(reason)
     end
 end
 
-local function applyToAll()
-    local veh = currentVeh()
-    local base = currentStock()
-    if not veh or not next(base) then return end
-
-    appliedList = {}
-    local count = 0
-    for _, other in ipairs(VEHICLES) do
-        local otherStock = stock[other.id]
-        if otherStock and next(otherStock) then
-            local params = copyTbl(otherStock)
-            for _, def in ipairs(PARAMS) do
-                if edit[def.key] ~= nil and otherStock[def.key] ~= nil then
-                    params[def.key] = edit[def.key]
-                end
-            end
-            local ok = applyToVariants(other, params)
-            if ok then
-                saved[other.id] = params
-                count = count + 1
-            end
-        end
-    end
-    vehicleCount = count
-    persistConfig()
-    statusMessage = "Applied current absolute values to " .. count .. " vehicles. Resummon to feel changes."
-end
-
 local function applyGroupToAll(groupName)
     local base = currentStock()
     if not next(base) then
@@ -1679,7 +1651,7 @@ local function drawUI()
     ImGui.SetNextWindowSize(720, 820, ImGuiCond.FirstUseEver)
     pushWindowStyle()
     local ok, err = pcall(function()
-    if ImGui.Begin("Vehicle Physics Config") then
+    if ImGui.Begin("Ultimate Vehicle Tuning") then
         if not tdbReady then
             ImGui.TextWrapped("Waiting for TweakDB... reload CET mods after the session has started.")
         else
@@ -1730,10 +1702,6 @@ local function drawUI()
             end
             ImGui.PopStyleColor(3)
             if pendingRespawn then ImGui.EndDisabled() end
-
-            if ImGui.Button("Apply absolute values to all vehicles") then
-                applyToAll()
-            end
 
             ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.78, 0.20, 1.0)
             ImGui.TextWrapped("Slider changes apply and save automatically when released. Exit the vehicle, then recycle to load changed physics.")
@@ -1814,7 +1782,7 @@ registerForEvent("onInit", function()
     applySaved()
     selectVehicle(selected)
     tdbReady = true
-    print("[VehiclePhysicsConfig] CET UI ready. Open the overlay to tune vehicles.")
+    print("[UltimateVehicleTuning] CET UI ready. Open the overlay to tune vehicles.")
 end)
 
 registerForEvent("onOverlayOpen", function()

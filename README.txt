@@ -1,4 +1,4 @@
-Vehicle Physics Config v1.3
+Ultimate Vehicle Tuning v1.3
 by indigo-nx
 CET UI restored locally — no desktop exe required.
 
@@ -25,7 +25,7 @@ INSTALLATION
 
     Verification:
       Launch the game, open the CET overlay (default: ~ or F1, depending on your bind).
-      You should see a window titled "Vehicle Physics Config // indigo-nx"
+      You should see a window titled "Ultimate Vehicle Tuning"
       with a vehicle dropdown and per-vehicle physics controls.
       If it doesn't appear, make sure VehiclePhysicsConfig/init.lua is inside:
         <game>/bin/x64/plugins/cyber_engine_tweaks/mods/
@@ -46,7 +46,7 @@ UNINSTALL
 HOW TO USE
 
   1. Start the game and open the CET overlay
-  2. Find "Vehicle Physics Config // indigo-nx"
+  2. Find "Ultimate Vehicle Tuning"
   3. Select a vehicle (or click Use current vehicle while driving)
   4. Adjust a slider or checkbox. Its absolute value applies and saves
      automatically when editing finishes.
@@ -85,48 +85,17 @@ PARAMETERS
   value.
 
 
-SUPPORTED VEHICLES (51)
+SUPPORTED VEHICLES
 
-  Hypercar:
-    Rayfield Caliburn, Rayfield Aerondight,
-    Herrera Riptide, Quadra Sport R-7
-
-  Sport:
-    Quadra Type-66 Avenger, Quadra Turbo-R V-Tech,
-    Quadra Type-66, Quadra Type-66 Javelina, Quadra Type-66 Cthulhu,
-    Mizutani Shion MZ2, Mizutani Shion, Mizutani Shion Coyote,
-    Porsche 911 Turbo, Herrera Outlaw GTS,
-    Yaiba ARV-Q340 Semimaru
-
-  Truck:
-    Thorton Mackinaw MTL1, Thorton Mackinaw Beast,
-    Thorton Colby CX410 Butte, Kaukaz Bratsk U4020,
-    Militech Hellhound
-
-  Luxury:
-    Villefort Alvarado, Villefort DeLeon,
-    Chevillon Emperor Ragnar, Chevillon Thrax Jefferson
-
-  Economy:
-    Archer Quartz EC-T2, Archer Quartz Bandit, Archer Hella EC-D I360,
-    Thorton Colby C240T, Thorton Galena G240, Thorton Galena Rattler,
-    Thorton Merrimac, Villefort Cortes Valor, Villefort Columbus V340-F,
-    Makigai MaiMai P126, Makigai Tanishi, Mahir Supron FS3,
-    Mizutani Hozuki
-
-  Bike:
-    Brennan Apollo, Scorpion's Apollo, Brennan Apollo 650-S,
-    ARCH Nazare, Jackie's ARCH, Jackie's ARCH (Tuned),
-    ARCH Nazare Itsumade, ARCH Nazare Racer, ARCH Nazare Kobold,
-    ARCH Nazare Malina-Mobile, Yaiba Kusanagi CT-3X,
-    Yaiba Kusanagi Peacekeeper, Yaiba Kusanagi Akashita,
-    Yaiba ASM-R250 Muramasa
+  The complete official player-vehicle roster is read from the installed
+  game's Vehicle.vehicle_list.list at runtime, including expansion and game
+  update vehicles. A valid mounted custom vehicle can also be selected with
+  Use current vehicle.
 
 
 PROFILES
 
   Save/Load profiles to keep multiple tuning setups.
-  Apply To All copies your current vehicle's exact absolute values.
 
 
 COMPATIBILITY
@@ -142,7 +111,7 @@ TECHNICAL
   - No game file replacement, no archive patching, no save risk
   - Single Lua file, no external dependencies beyond CET
   - Uses confirmed post-2.0 TweakDB property names
-  - Vehicle TweakDB IDs verified against Red Modding Wiki
+  - Official vehicle TweakDB IDs come from the installed game's player list
   - Slider UI runs inside CET ImGui; stock values are read from live TweakDB
 
 
