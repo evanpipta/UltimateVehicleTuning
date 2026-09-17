@@ -1,4 +1,4 @@
--- CP2077 Vehicle Physics Config // indigo-nx
+-- CP2077 Vehicle Physics Config 
 -- Self-contained CET UI. Reads live TweakDB values, no external exe required.
 
 local VEHICLES = {
@@ -40,7 +40,8 @@ local VEHICLES = {
     { id = "Vehicle.v_standard25_mahir_supron_player",    name = "Mahir Supron FS3",             class = "Economy" },
     { id = "Vehicle.v_standard2_mizutani_hozuki_player",  name = "Mizutani Hozuki Hoseki",       class = "Economy" },
 
-    -- Player/garage motorcycle records from the game 2.31 TweakDB.
+    -- Common player/garage motorcycle records. Additional official records are
+    -- discovered from Vehicle.vehicle_list.list during onInit.
     { id = "Vehicle.v_sportbike3_brennan_apollo_player",       name = "Brennan Apollo",                class = "Bike" },
     { id = "Vehicle.v_sportbike3_brennan_apollo_nomad_player", name = "Scorpion's Apollo",             class = "Bike" },
     { id = "Vehicle.v_sportbike3_brennan_apollo_player_02",    name = "Brennan Apollo 650-S",          class = "Bike" },
@@ -58,9 +59,95 @@ local VEHICLES = {
     { id = "Vehicle.v_sportbike1_yaiba_muramasa_player",        name = "Yaiba ASM-R250 Muramasa",       class = "Bike" },
 }
 
+-- The game maintains the complete base-game/expansion garage roster in this
+-- TweakDB list. Reading it at runtime keeps the mod aligned with the installed
+-- game version instead of relying on a manually maintained subset.
+local MURAMASA_VARIANTS = {
+    "Vehicle.v_sportbike1_yaiba_muramasa_naked",
+    "Vehicle.v_sportbike1_yaiba_muramasa_naked_as",
+    "Vehicle.v_sportbike1_yaiba_muramasa_naked_as_nr",
+    "Vehicle.v_sportbike1_yaiba_muramasa_naked_as_ns",
+    "Vehicle.v_sportbike1_yaiba_muramasa_naked_as_ns_nr",
+    "Vehicle.v_sportbike1_yaiba_muramasa_naked_nr",
+    "Vehicle.v_sportbike1_yaiba_muramasa_naked_ns",
+    "Vehicle.v_sportbike1_yaiba_muramasa_naked_ns_nr",
+    "Vehicle.v_sportbike1_yaiba_muramasa_regular",
+    "Vehicle.v_sportbike1_yaiba_muramasa_regular_as",
+    "Vehicle.v_sportbike1_yaiba_muramasa_regular_as_nr",
+    "Vehicle.v_sportbike1_yaiba_muramasa_regular_as_ns",
+    "Vehicle.v_sportbike1_yaiba_muramasa_regular_as_ns_nr",
+    "Vehicle.v_sportbike1_yaiba_muramasa_regular_nr",
+    "Vehicle.v_sportbike1_yaiba_muramasa_regular_ns",
+    "Vehicle.v_sportbike1_yaiba_muramasa_regular_ns_nr",
+}
+
+local function vehicleIdString(value)
+    if type(value) == "string" then return value end
+    local ok, name = pcall(function() return TDBID.ToStringDEBUG(value) end)
+    if ok and name and name ~= "" then return tostring(name) end
+    return tostring(value or "")
+end
+
+local function friendlyVehicleName(id)
+    local name = tostring(id or "")
+    name = name:gsub("^Vehicle%.v_", "")
+    name = name:gsub("^(sportbike%d*)_", "")
+    name = name:gsub("^(sport%d*)_", "")
+    name = name:gsub("^(standard%d*)_", "")
+    name = name:gsub("^(utility%d*)_", "")
+    name = name:gsub("_player", "")
+    name = name:gsub("_", " ")
+    name = name:gsub("(%a)([%w']*)", function(first, rest)
+        return first:upper() .. rest
+    end)
+    return name
+end
+
+local function discoverOfficialVehicles()
+    local byId = {}
+    for _, veh in ipairs(VEHICLES) do byId[veh.id:lower()] = veh end
+
+    local muramasa = byId["vehicle.v_sportbike1_yaiba_muramasa_player"]
+    if muramasa then
+        muramasa.variants = muramasa.variants or {}
+        local known = {}
+        for _, id in ipairs(muramasa.variants) do known[id:lower()] = true end
+        for _, id in ipairs(MURAMASA_VARIANTS) do
+            if not known[id:lower()] then table.insert(muramasa.variants, id) end
+            byId[id:lower()] = muramasa
+        end
+    end
+
+    local ok, list = pcall(function()
+        return TweakDB:GetFlat(TweakDBID.new("Vehicle.vehicle_list.list"))
+    end)
+    if not ok or type(list) ~= "table" then
+        print("[VehiclePhysicsConfig] Could not read Vehicle.vehicle_list.list; using built-in roster.")
+        return
+    end
+
+    local added = 0
+    for _, rawId in ipairs(list) do
+        local id = vehicleIdString(rawId)
+        if id ~= "" and not id:find("^Vehicle%.") then id = "Vehicle." .. id end
+        if id:find("^Vehicle%.") and not byId[id:lower()] then
+            local veh = {
+                id = id,
+                name = friendlyVehicleName(id),
+                class = "Additional Player Vehicles",
+            }
+            table.insert(VEHICLES, veh)
+            byId[id:lower()] = veh
+            added = added + 1
+        end
+    end
+    print("[VehiclePhysicsConfig] Loaded " .. #VEHICLES ..
+        " player vehicle physics entries (" .. added .. " discovered).")
+end
+
 local PARAMS = {
-    { key = "total_mass",         group = "MASS & DYNAMICS",    label = "Total Mass",       fmt = "%.0f kg",  absMin = 200,   absMax = 8000 },
-    { key = "chassis_mass",       group = "MASS & DYNAMICS",    label = "Chassis Mass",     fmt = "%.0f kg",  absMin = 200,   absMax = 8000 },
+    { key = "total_mass",         group = "MASS & DYNAMICS",    label = "Total Mass",       fmt = "%.0f kg",  absMin = 50,    absMax = 30000 },
+    { key = "chassis_mass",       group = "MASS & DYNAMICS",    label = "Chassis Mass",     fmt = "%.0f kg",  absMin = 50,    absMax = 30000 },
     { key = "air_resistance",     group = "MASS & DYNAMICS",    label = "Air Resistance",   fmt = "%.2f",     absMin = 0.05,  absMax = 12 },
     { key = "com_x", group = "CENTER OF MASS & BODY ROTATION", label = "COM X (Left/Right)", fmt = "%.2f m", absMin = -2, absMax = 2 },
     { key = "com_y", group = "CENTER OF MASS & BODY ROTATION", label = "COM Y (Forward/Back)", fmt = "%.2f m", absMin = -3, absMax = 3 },
@@ -78,24 +165,30 @@ local PARAMS = {
     { key = "bank_body_lr", group = "CENTER OF MASS & BODY ROTATION", label = "Body Bank Left/Right", fmt = "%.2f", absMin = 0, absMax = 3 },
     { key = "body_friction", group = "CENTER OF MASS & BODY ROTATION", label = "Body Friction", fmt = "%.2f", absMin = 0, absMax = 10 },
     { key = "anti_sway_damping", group = "CENTER OF MASS & BODY ROTATION", label = "Anti-Swaybar Damping Scale", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "turning_roll_weak_mul", group = "CENTER OF MASS & BODY ROTATION", label = "Weak-Contact Roll Multiplier", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "turning_roll_weak_min", group = "CENTER OF MASS & BODY ROTATION", label = "Weak-Contact Threshold Minimum", fmt = "%.2f", absMin = 0, absMax = 2 },
-    { key = "turning_roll_weak_max", group = "CENTER OF MASS & BODY ROTATION", label = "Weak-Contact Threshold Maximum", fmt = "%.2f", absMin = 0, absMax = 2 },
-    { key = "max_torque",         group = "ENGINE",             label = "Max Torque",       fmt = "%.0f Nm",  absMin = 20,    absMax = 2500 },
+    { key = "turn_roll_weak_mul", group = "CENTER OF MASS & BODY ROTATION", label = "Weak-Contact Roll Multiplier", fmt = "%.2f", absMin = 0, absMax = 10 },
+    { key = "turn_roll_weak_min", group = "CENTER OF MASS & BODY ROTATION", label = "Weak-Contact Threshold Minimum", fmt = "%.2f", absMin = 0, absMax = 2 },
+    { key = "turn_roll_weak_max", group = "CENTER OF MASS & BODY ROTATION", label = "Weak-Contact Threshold Maximum", fmt = "%.2f", absMin = 0, absMax = 2 },
+    { key = "max_torque",         group = "ENGINE",             label = "Max Torque",       fmt = "%.0f Nm",  absMin = 0,     absMax = 10000 },
     { key = "resistance_torque",  group = "ENGINE",             label = "Resistance",       fmt = "%.0f Nm",  absMin = 0,     absMax = 800 },
     { key = "max_rpm",            group = "ENGINE",             label = "Max RPM",          fmt = "%.0f",     absMin = 2000,  absMax = 16000 },
-    { key = "susp_front_spring",  group = "SUSPENSION // FRONT", label = "Spring Rate",     fmt = "%.1f",     absMin = 1,     absMax = 80 },
-    { key = "susp_front_damp",    group = "SUSPENSION // FRONT", label = "Damping",         fmt = "%.0f",     absMin = 100,   absMax = 15000 },
-    { key = "susp_front_rebound", group = "SUSPENSION // FRONT", label = "Rebound",         fmt = "%.0f",     absMin = 100,   absMax = 15000 },
+    { key = "susp_front_spring",  group = "SUSPENSION // FRONT", label = "Spring Rate",     fmt = "%.1f",     absMin = 0,     absMax = 500 },
+    { key = "susp_front_damp",    group = "SUSPENSION // FRONT", label = "Damping",         fmt = "%.0f",     absMin = 0,     absMax = 30000 },
+    { key = "susp_front_rebound", group = "SUSPENSION // FRONT", label = "Rebound",         fmt = "%.0f",     absMin = 0,     absMax = 30000 },
     { key = "susp_front_antiroll",group = "SUSPENSION // FRONT", label = "Anti-Roll",       fmt = "%.1f",     absMin = 0,     absMax = 300 },
-    { key = "susp_rear_spring",   group = "SUSPENSION // REAR",  label = "Spring Rate",     fmt = "%.1f",     absMin = 1,     absMax = 80 },
-    { key = "susp_rear_damp",     group = "SUSPENSION // REAR",  label = "Damping",         fmt = "%.0f",     absMin = 100,   absMax = 15000 },
-    { key = "susp_rear_rebound",  group = "SUSPENSION // REAR",  label = "Rebound",         fmt = "%.0f",     absMin = 100,   absMax = 15000 },
+    { key = "susp_rear_spring",   group = "SUSPENSION // REAR",  label = "Spring Rate",     fmt = "%.1f",     absMin = 0,     absMax = 500 },
+    { key = "susp_rear_damp",     group = "SUSPENSION // REAR",  label = "Damping",         fmt = "%.0f",     absMin = 0,     absMax = 30000 },
+    { key = "susp_rear_rebound",  group = "SUSPENSION // REAR",  label = "Rebound",         fmt = "%.0f",     absMin = 0,     absMax = 30000 },
     { key = "susp_rear_antiroll", group = "SUSPENSION // REAR",  label = "Anti-Roll",       fmt = "%.1f",     absMin = 0,     absMax = 300 },
     { key = "tire_front_lat",     group = "TIRES",              label = "Front Lateral",    fmt = "%.2f",     absMin = 0.05,  absMax = 3 },
     { key = "tire_front_long",    group = "TIRES",              label = "Front Longit.",    fmt = "%.2f",     absMin = 0.05,  absMax = 3 },
     { key = "tire_rear_lat",      group = "TIRES",              label = "Rear Lateral",     fmt = "%.2f",     absMin = 0.05,  absMax = 3 },
     { key = "tire_rear_long",     group = "TIRES",              label = "Rear Longit.",     fmt = "%.2f",     absMin = 0.05,  absMax = 3 },
+    { key = "tire_front_base_friction", group = "TIRES", label = "Front Base Friction", fmt = "%.2f", absMin = 0, absMax = 10 },
+    { key = "tire_front_rolling", group = "TIRES", label = "Front Rolling Resistance", fmt = "%.3f", absMin = 0, absMax = 10 },
+    { key = "wheel_front_mass", group = "TIRES", label = "Front Wheel Mass", fmt = "%.1f kg", absMin = 0, absMax = 500 },
+    { key = "tire_rear_base_friction", group = "TIRES", label = "Rear Base Friction", fmt = "%.2f", absMin = 0, absMax = 10 },
+    { key = "tire_rear_rolling", group = "TIRES", label = "Rear Rolling Resistance", fmt = "%.3f", absMin = 0, absMax = 10 },
+    { key = "wheel_rear_mass", group = "TIRES", label = "Rear Wheel Mass", fmt = "%.1f kg", absMin = 0, absMax = 500 },
     { key = "steer_turn_add",     group = "STEERING",           label = "Turn Speed+",      fmt = "%.0f %%",  absMin = 10,    absMax = 2000 },
     { key = "steer_turn_sub",     group = "STEERING",           label = "Turn Speed-",      fmt = "%.0f %%",  absMin = 10,    absMax = 2000 },
     { key = "steer_assist",       group = "STEERING",           label = "Steering Assist",  fmt = "%.2f",     absMin = 0,     absMax = 3 },
@@ -113,80 +206,31 @@ local PARAMS = {
     { key = "steer_input_diff_slow", group = "SPEED-SENSITIVE STEERING", label = "Slow-Change Input Difference", fmt = "%.2f", absMin = 0, absMax = 2 },
     { key = "steer_input_diff_fast", group = "SPEED-SENSITIVE STEERING", label = "Fast-Change Input Difference", fmt = "%.2f", absMin = 0, absMax = 2 },
     { key = "steer_fast_rate", group = "SPEED-SENSITIVE STEERING", label = "Fast Input Change", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "steer_wheel_max_force", group = "ADVANCED STEERING & STABILITY", label = "Max Wheel Force", fmt = "%.0f N", absMin = 0, absMax = 50000 },
-    { key = "steer_wheel_resistance", group = "ADVANCED STEERING & STABILITY", label = "Wheel Resistance", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "steer_stabilizer", group = "ADVANCED STEERING & STABILITY", label = "Stabilizer Factor", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "steer_body_roll_factor", group = "ADVANCED STEERING & STABILITY", label = "Body Roll Factor", fmt = "%.2f", absMin = 0, absMax = 5 },
-    { key = "steer_snap_angle", group = "ADVANCED STEERING & STABILITY", label = "Snap-To-Axis Angle", fmt = "%.1f deg", absMin = 0, absMax = 90 },
-    { key = "steer_snap_speed", group = "ADVANCED STEERING & STABILITY", label = "Snap-To-Axis Speed", fmt = "%.2f", absMin = 0, absMax = 20 },
-    { key = "steer_traction_control", group = "ADVANCED STEERING & STABILITY", label = "Traction Control", type = "bool" },
-    { key = "steer_abs", group = "ADVANCED STEERING & STABILITY", label = "ABS", type = "bool" },
-    { key = "slip_angle_min_speed", group = "GRIP & SLIP MODEL", label = "Slip-Angle Min Speed", fmt = "%.2f m/s", absMin = 0, absMax = 100 },
-    { key = "slip_ratio_min_speed", group = "GRIP & SLIP MODEL", label = "Slip-Ratio Min Speed", fmt = "%.2f m/s", absMin = 0, absMax = 100 },
-    { key = "slip_angle_lateral_factor", group = "GRIP & SLIP MODEL", label = "Lateral Slip-Angle Factor", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "slip_angle_peak_factor", group = "GRIP & SLIP MODEL", label = "Peak Slip-Angle Factor", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "slip_angle_wheel_factor", group = "GRIP & SLIP MODEL", label = "Wheel Slip-Angle Factor", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "slip_ratio_factor", group = "GRIP & SLIP MODEL", label = "Slip-Ratio Factor", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "wheel_load_min", group = "GRIP & SLIP MODEL", label = "Minimum Wheel Load", fmt = "%.0f N", absMin = 0, absMax = 10000 },
-    { key = "wheel_load_factor", group = "GRIP & SLIP MODEL", label = "Wheel Load Factor", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "wheel_load_max", group = "GRIP & SLIP MODEL", label = "Maximum Wheel Load", fmt = "%.0f N", absMin = 0, absMax = 50000 },
-    { key = "wheel_tire_factor", group = "GRIP & SLIP MODEL", label = "Wheel Tire Factor", fmt = "%.2f", absMin = 0, absMax = 10 },
+    { key = "slip_angle_min_speed", group = "GRIP & SLIP MODEL", label = "Slip-Angle Min Speed", fmt = "%.2f m/s", absMin = -10, absMax = 100 },
+    { key = "slip_ratio_min_speed", group = "GRIP & SLIP MODEL", label = "Slip-Ratio Min Speed", fmt = "%.2f m/s", absMin = -10, absMax = 100 },
     { key = "slope_traction_factor", group = "GRIP & SLIP MODEL", label = "Slope Traction Reduction", fmt = "%.2f", absMin = 0, absMax = 20 },
     { key = "slope_traction_begin", group = "GRIP & SLIP MODEL", label = "Slope Reduction Begin", fmt = "%.1f deg", absMin = 0, absMax = 90 },
     { key = "slope_traction_max", group = "GRIP & SLIP MODEL", label = "Slope Reduction Maximum", fmt = "%.1f deg", absMin = 0, absMax = 90 },
     { key = "slip_angle_curve_scale", group = "GRIP & SLIP MODEL", label = "Slip-Angle Curve Scale", fmt = "%.2f", absMin = 0, absMax = 10 },
     { key = "slip_ratio_curve_scale", group = "GRIP & SLIP MODEL", label = "Slip-Ratio Curve Scale", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "contact_lateral_falloff", group = "WHEEL CONTACT MODEL", label = "Lateral Friction Falloff", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "contact_long_falloff", group = "WHEEL CONTACT MODEL", label = "Longitudinal Friction Falloff", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "contact_lateral_force_max", group = "WHEEL CONTACT MODEL", label = "Maximum Lateral Force", fmt = "%.0f N", absMin = 0, absMax = 100000 },
-    { key = "contact_lateral_force_max_rear", group = "WHEEL CONTACT MODEL", label = "Rear Maximum Lateral Force", fmt = "%.0f N", absMin = 0, absMax = 100000 },
-    { key = "contact_wheel_scale", group = "WHEEL CONTACT MODEL", label = "Wheel Force Scale", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "contact_tire_scale", group = "WHEEL CONTACT MODEL", label = "Tire Force Scale", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "contact_forward_sway", group = "WHEEL CONTACT MODEL", label = "Forward Sway", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "contact_side_sway", group = "WHEEL CONTACT MODEL", label = "Side Sway", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "contact_strength", group = "WHEEL CONTACT MODEL", label = "Contact Strength", fmt = "%.2f", absMin = 0, absMax = 20 },
-    { key = "contact_sliding", group = "WHEEL CONTACT MODEL", label = "Sliding Factor", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "contact_friction_coeff", group = "WHEEL CONTACT MODEL", label = "Friction Coefficient", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "contact_factor", group = "WHEEL CONTACT MODEL", label = "Contact Factor", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "contact_drag", group = "WHEEL CONTACT MODEL", label = "Contact Drag", fmt = "%.2f", absMin = 0, absMax = 20 },
-    { key = "contact_smooth_increase", group = "WHEEL CONTACT MODEL", label = "Contact Increase Smoothing", fmt = "%.3f s", absMin = 0, absMax = 10 },
-    { key = "contact_smooth_decrease", group = "WHEEL CONTACT MODEL", label = "Contact Decrease Smoothing", fmt = "%.3f s", absMin = 0, absMax = 10 },
+    { key = "contact_increase_time", group = "WHEEL CONTACT MODEL", label = "Contact Increase Smoothing", fmt = "%.3f s", absMin = 0, absMax = 10 },
+    { key = "contact_decrease_time", group = "WHEEL CONTACT MODEL", label = "Contact Decrease Smoothing", fmt = "%.3f s", absMin = 0, absMax = 10 },
     { key = "low_speed_stop_decel", group = "WHEEL CONTACT MODEL", label = "Low-Speed Stopping Deceleration", fmt = "%.2f", absMin = 0, absMax = 20 },
     { key = "braking_friction_factor", group = "WHEEL CONTACT MODEL", label = "Braking Friction Factor", fmt = "%.2f", absMin = 0, absMax = 20 },
     { key = "differential_overshoot", group = "WHEEL CONTACT MODEL", label = "Differential Overshoot Factor", fmt = "%.2f", absMin = 0, absMax = 20 },
-    { key = "braking_estimation_factor", group = "WHEEL CONTACT MODEL", label = "Braking Estimation Factor", fmt = "%.2f", absMin = 0, absMax = 20 },
-    { key = "engine_power_base", group = "ENGINE RESPONSE", label = "Base Power", fmt = "%.0f", absMin = 0, absMax = 10000 },
-    { key = "engine_torque_base", group = "ENGINE RESPONSE", label = "Base Torque", fmt = "%.0f Nm", absMin = 0, absMax = 10000 },
-    { key = "engine_resistance_base", group = "ENGINE RESPONSE", label = "Base Resistance Torque", fmt = "%.0f Nm", absMin = 0, absMax = 5000 },
-    { key = "engine_fast_forward", group = "ENGINE RESPONSE", label = "Fast Forward Factor", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "engine_force_reverse", group = "ENGINE RESPONSE", label = "Force Reverse RPM", fmt = "%.0f", absMin = 0, absMax = 20000 },
+    { key = "braking_estimation", group = "WHEEL CONTACT MODEL", label = "Braking Estimation Factor", fmt = "%.2f", absMin = 0, absMax = 20 },
     { key = "engine_min_rpm", group = "ENGINE RESPONSE", label = "Minimum RPM", fmt = "%.0f", absMin = 0, absMax = 10000 },
-    { key = "engine_resistance_rpm", group = "ENGINE RESPONSE", label = "Resistance RPM", fmt = "%.0f", absMin = 0, absMax = 20000 },
-    { key = "engine_torque_rpm", group = "ENGINE RESPONSE", label = "Torque RPM", fmt = "%.0f", absMin = 0, absMax = 20000 },
-    { key = "engine_max_resistance", group = "ENGINE RESPONSE", label = "Maximum Resistance Torque", fmt = "%.0f Nm", absMin = 0, absMax = 10000 },
-    { key = "engine_min_resistance", group = "ENGINE RESPONSE", label = "Minimum Resistance Torque", fmt = "%.0f Nm", absMin = 0, absMax = 10000 },
-    { key = "engine_min_torque", group = "ENGINE RESPONSE", label = "Minimum Torque", fmt = "%.0f Nm", absMin = 0, absMax = 10000 },
-    { key = "engine_max_reverse_speed", group = "ENGINE RESPONSE", label = "Maximum Reverse Speed", fmt = "%.1f m/s", absMin = 0, absMax = 200 },
-    { key = "engine_negative_torque", group = "ENGINE RESPONSE", label = "Negative Torque If Not Driven", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "engine_constant_torque", group = "ENGINE RESPONSE", label = "Constant Torque", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "engine_gear_change_time", group = "ENGINE RESPONSE", label = "Gear Change Time", fmt = "%.3f s", absMin = 0, absMax = 5 },
-    { key = "engine_clutch_speed", group = "ENGINE RESPONSE", label = "Clutch Change Speed", fmt = "%.2f", absMin = 0, absMax = 20 },
-    { key = "engine_wheels_resistance", group = "ENGINE RESPONSE", label = "Wheels Resistance Ratio", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "engine_resistance_current", group = "ENGINE RESPONSE", label = "Resistance at Current RPM", fmt = "%.0f Nm", absMin = 0, absMax = 10000 },
-    { key = "engine_resistance_min", group = "ENGINE RESPONSE", label = "Resistance at Minimum RPM", fmt = "%.0f Nm", absMin = 0, absMax = 10000 },
-    { key = "engine_resistance_max", group = "ENGINE RESPONSE", label = "Resistance at Maximum RPM", fmt = "%.0f Nm", absMin = 0, absMax = 10000 },
-    { key = "engine_torque_current", group = "ENGINE RESPONSE", label = "Torque at Current RPM", fmt = "%.0f Nm", absMin = 0, absMax = 10000 },
-    { key = "engine_torque_min", group = "ENGINE RESPONSE", label = "Torque at Minimum RPM", fmt = "%.0f Nm", absMin = 0, absMax = 10000 },
-    { key = "engine_torque_max", group = "ENGINE RESPONSE", label = "Torque at Maximum RPM", fmt = "%.0f Nm", absMin = 0, absMax = 10000 },
-    { key = "engine_gear_cooldown", group = "ENGINE RESPONSE", label = "Gear Change Cooldown", fmt = "%.3f s", absMin = 0, absMax = 10 },
-    { key = "engine_final_torque_decimation", group = "ENGINE RESPONSE", label = "Final-Gear Torque Decimation", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "engine_flywheel_inertia", group = "ENGINE RESPONSE", label = "Flywheel Inertia", fmt = "%.2f", absMin = 0, absMax = 100 },
-    { key = "engine_reverse_delay", group = "ENGINE RESPONSE", label = "Reverse Direction Delay", fmt = "%.3f s", absMin = 0, absMax = 10 },
-    { key = "engine_fast_r1", group = "ENGINE RESPONSE", label = "Fast Reverse/First-Gear Change", type = "bool" },
-    { key = "engine_force_reverse_min", group = "ENGINE RESPONSE", label = "Force Reverse RPM to Minimum", type = "bool" },
-    { key = "brake_front",        group = "BRAKING",            label = "Front Brake",      fmt = "%.0f Nm",  absMin = 50,    absMax = 4000 },
-    { key = "brake_rear",         group = "BRAKING",            label = "Rear Brake",       fmt = "%.0f Nm",  absMin = 50,    absMax = 4000 },
-    { key = "brake_handbrake",    group = "BRAKING",            label = "Handbrake",        fmt = "%.0f Nm",  absMin = 50,    absMax = 5000 },
+    { key = "gear_change_time", group = "ENGINE RESPONSE", label = "Gear Change Time", fmt = "%.3f s", absMin = 0, absMax = 5 },
+    { key = "wheel_resistance_ratio", group = "ENGINE RESPONSE", label = "Wheels Resistance Ratio", fmt = "%.2f", absMin = 0, absMax = 10 },
+    { key = "gear_change_cooldown", group = "ENGINE RESPONSE", label = "Gear Change Cooldown", fmt = "%.3f s", absMin = 0, absMax = 10 },
+    { key = "final_gear_torque_decay", group = "ENGINE RESPONSE", label = "Final-Gear Torque Decimation", fmt = "%.2f", absMin = 0, absMax = 10 },
+    { key = "flywheel_inertia", group = "ENGINE RESPONSE", label = "Flywheel Inertia", fmt = "%.2f", absMin = 0, absMax = 100 },
+    { key = "reverse_direction_delay", group = "ENGINE RESPONSE", label = "Reverse Direction Delay", fmt = "%.3f s", absMin = 0, absMax = 10 },
+    { key = "fast_r1_change", group = "ENGINE RESPONSE", label = "Fast Reverse/First-Gear Change", type = "bool" },
+    { key = "force_reverse_min_rpm", group = "ENGINE RESPONSE", label = "Force Reverse RPM to Minimum", type = "bool" },
+    { key = "brake_front",        group = "BRAKING",            label = "Front Brake",      fmt = "%.0f Nm",  absMin = 0,     absMax = 20000 },
+    { key = "brake_rear",         group = "BRAKING",            label = "Rear Brake",       fmt = "%.0f Nm",  absMin = 0,     absMax = 20000 },
+    { key = "brake_handbrake",    group = "BRAKING",            label = "Handbrake",        fmt = "%.0f Nm",  absMin = 0,     absMax = 20000 },
     { key = "front_sway_limit", group = "ADVANCED SUSPENSION // FRONT", label = "Swaybar Displacement Limit", fmt = "%.3f m", absMin = 0, absMax = 5 },
     { key = "front_sway_length", group = "ADVANCED SUSPENSION // FRONT", label = "Swaybar Length Scalar", fmt = "%.2f", absMin = 0, absMax = 10 },
     { key = "front_bound_low", group = "ADVANCED SUSPENSION // FRONT", label = "Low-Rate Bound Damping", fmt = "%.0f", absMin = 0, absMax = 30000 },
@@ -229,53 +273,28 @@ local PARAMS = {
     { key = "rear_rim_radius", group = "WHEEL GEOMETRY // REAR", label = "Rim Radius", fmt = "%.3f m", absMin = 0.05, absMax = 2 },
     { key = "rear_tire_width", group = "WHEEL GEOMETRY // REAR", label = "Tire Width", fmt = "%.3f m", absMin = 0.02, absMax = 2 },
     { key = "rear_wheel_offset", group = "WHEEL GEOMETRY // REAR", label = "Wheel Offset", fmt = "%.3f m", absMin = -2, absMax = 2 },
-    { key = "burnout_max_speed", group = "BURNOUT & LAUNCH GRIP", label = "Maximum Initiation Speed", fmt = "%.1f m/s", absMin = 0, absMax = 200 },
-    { key = "burnout_lateral_force_max_accel", group = "BURNOUT & LAUNCH GRIP", label = "Maximum Lateral Acceleration", fmt = "%.2f", absMin = 0, absMax = 20 },
-    { key = "burnout_lateral_force_max_speed", group = "BURNOUT & LAUNCH GRIP", label = "Maximum Lateral Speed", fmt = "%.1f m/s", absMin = 0, absMax = 200 },
-    { key = "burnout_lateral_multiplier_max_speed", group = "BURNOUT & LAUNCH GRIP", label = "Lateral Multiplier Max Speed", fmt = "%.1f m/s", absMin = 0, absMax = 200 },
-    { key = "burnout_lateral_multiplier_min", group = "BURNOUT & LAUNCH GRIP", label = "Minimum Lateral Multiplier", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "burnout_lateral_multiplier_max", group = "BURNOUT & LAUNCH GRIP", label = "Maximum Lateral Multiplier", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "burnout_long_force_max_accel", group = "BURNOUT & LAUNCH GRIP", label = "Maximum Longitudinal Acceleration", fmt = "%.2f", absMin = 0, absMax = 20 },
-    { key = "burnout_long_force_max_speed", group = "BURNOUT & LAUNCH GRIP", label = "Maximum Longitudinal Speed", fmt = "%.1f m/s", absMin = 0, absMax = 200 },
-    { key = "burnout_long_multiplier_max_speed", group = "BURNOUT & LAUNCH GRIP", label = "Longitudinal Multiplier Max Speed", fmt = "%.1f m/s", absMin = 0, absMax = 200 },
-    { key = "burnout_long_multiplier_min", group = "BURNOUT & LAUNCH GRIP", label = "Minimum Longitudinal Multiplier", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "burnout_long_multiplier_max", group = "BURNOUT & LAUNCH GRIP", label = "Maximum Longitudinal Multiplier", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "burnout_lateral_decimation", group = "BURNOUT & LAUNCH GRIP", label = "Forward-Speed Lateral Decimation", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "burnout_max_wheel_slip", group = "BURNOUT & LAUNCH GRIP", label = "Maximum Drive-Wheel Slip Ratio", fmt = "%.2f", absMin = 0, absMax = 100 },
-    { key = "burnout_lateral_slip_influence", group = "BURNOUT & LAUNCH GRIP", label = "Lateral Slip-Ratio Influence", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "burnout_max_lat_accel_slip_mul", group = "BURNOUT & LAUNCH GRIP", label = "Max Lateral-Accel Slip Multiplier", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "burnout_max_long_friction_slip_mul", group = "BURNOUT & LAUNCH GRIP", label = "Max Longitudinal-Friction Slip Multiplier", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "burnout_min_long_slip_scaled", group = "BURNOUT & LAUNCH GRIP", label = "Minimum Scaled Longitudinal Slip", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "burnout_min_long_friction", group = "BURNOUT & LAUNCH GRIP", label = "Minimum Longitudinal Friction", fmt = "%.2f", absMin = 0, absMax = 10 },
+    { key = "burnout_max_start_speed", group = "BURNOUT & LAUNCH GRIP", label = "Maximum Initiation Speed", fmt = "%.1f m/s", absMin = 0, absMax = 200 },
+    { key = "burnout_lat_accel_max", group = "BURNOUT & LAUNCH GRIP", label = "Maximum Lateral Acceleration", fmt = "%.2f", absMin = 0, absMax = 20 },
+    { key = "burnout_lat_speed_max", group = "BURNOUT & LAUNCH GRIP", label = "Maximum Lateral Speed", fmt = "%.1f m/s", absMin = 0, absMax = 200 },
+    { key = "burnout_forward_decay", group = "BURNOUT & LAUNCH GRIP", label = "Forward-Speed Lateral Decimation", fmt = "%.2f", absMin = 0, absMax = 10 },
+    { key = "burnout_drive_slip_max", group = "BURNOUT & LAUNCH GRIP", label = "Maximum Drive-Wheel Slip Ratio", fmt = "%.2f", absMin = 0, absMax = 100 },
+    { key = "burnout_lat_slip_influence", group = "BURNOUT & LAUNCH GRIP", label = "Lateral Slip-Ratio Influence", fmt = "%.2f", absMin = 0, absMax = 10 },
+    { key = "burnout_lat_accel_slip_mul", group = "BURNOUT & LAUNCH GRIP", label = "Max Lateral-Accel Slip Multiplier", fmt = "%.2f", absMin = 0, absMax = 10 },
+    { key = "burnout_long_friction_slip_mul", group = "BURNOUT & LAUNCH GRIP", label = "Max Longitudinal-Friction Slip Multiplier", fmt = "%.2f", absMin = 0, absMax = 10 },
+    { key = "burnout_long_friction_min_scaled", group = "BURNOUT & LAUNCH GRIP", label = "Minimum Scaled Longitudinal Slip", fmt = "%.2f", absMin = 0, absMax = 10 },
+    { key = "burnout_long_coeff_min", group = "BURNOUT & LAUNCH GRIP", label = "Minimum Longitudinal Friction", fmt = "%.2f", absMin = 0, absMax = 10 },
     { key = "burnout_grip_bonus", group = "BURNOUT & LAUNCH GRIP", label = "Burnout Grip Bonus", fmt = "%.2f", absMin = 0, absMax = 30 },
     { key = "burnout_grip_speed_mul", group = "BURNOUT & LAUNCH GRIP", label = "Grip-Bonus Speed Multiplier", fmt = "%.2f", absMin = 0, absMax = 10 },
     { key = "burnout_grip_launch_speed", group = "BURNOUT & LAUNCH GRIP", label = "Grip-Bonus Maximum Launch Speed", fmt = "%.1f m/s", absMin = 0, absMax = 200 },
-    { key = "burnout_min_brake_modifier", group = "BURNOUT & LAUNCH GRIP", label = "Minimum Brake Modifier", fmt = "%.3f", absMin = 0, absMax = 10 },
-    { key = "burnout_max_brake_modifier", group = "BURNOUT & LAUNCH GRIP", label = "Maximum Brake Modifier", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "bike_lean_angle_zero", group = "BIKE DYNAMICS", label = "Lean Angle at Zero Speed", fmt = "%.1f deg", absMin = 0, absMax = 90 },
-    { key = "bike_lean_angle_max", group = "BIKE DYNAMICS", label = "Lean Angle at Maximum Speed", fmt = "%.1f deg", absMin = 0, absMax = 90 },
-    { key = "bike_lean_angle_max_speed", group = "BIKE DYNAMICS", label = "Lean Maximum Speed", fmt = "%.1f m/s", absMin = 0, absMax = 200 },
-    { key = "bike_lean_mult", group = "BIKE DYNAMICS", label = "Lean Angle Multiplier", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "bike_lean_calc_ease", group = "BIKE DYNAMICS", label = "Lean Calculation Ease", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "bike_lean_gravity_angle", group = "BIKE DYNAMICS", label = "Lean Gravity Angle", fmt = "%.1f deg", absMin = 0, absMax = 90 },
-    { key = "bike_lean_gravity_force", group = "BIKE DYNAMICS", label = "Lean Gravity Force", fmt = "%.2f", absMin = 0, absMax = 50 },
-    { key = "bike_lean_gravity_scale", group = "BIKE DYNAMICS", label = "Lean Gravity Scale", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "bike_lean_target_speed", group = "BIKE DYNAMICS", label = "Target Lean Speed", fmt = "%.2f", absMin = 0, absMax = 50 },
-    { key = "bike_lean_unlean_speed", group = "BIKE DYNAMICS", label = "Unlean Speed", fmt = "%.2f", absMin = 0, absMax = 50 },
-    { key = "bike_lean_unlean_max_speed", group = "BIKE DYNAMICS", label = "Unlean Maximum Speed", fmt = "%.1f m/s", absMin = 0, absMax = 200 },
-    { key = "bike_lean_unlean_max_speed_val", group = "BIKE DYNAMICS", label = "Unlean Value at Maximum Speed", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "bike_turn_angle_zero", group = "BIKE DYNAMICS", label = "Turn Angle at Zero Speed", fmt = "%.1f deg", absMin = 0, absMax = 90 },
-    { key = "bike_turn_angle_max", group = "BIKE DYNAMICS", label = "Turn Angle at Maximum Speed", fmt = "%.1f deg", absMin = 0, absMax = 90 },
-    { key = "bike_turn_max_speed", group = "BIKE DYNAMICS", label = "Turn Maximum Speed", fmt = "%.1f m/s", absMin = 0, absMax = 200 },
-    { key = "bike_lean_double_tap", group = "BIKE DYNAMICS", label = "Lean Double-Tap", type = "bool" },
-    { key = "bike_rear_wheel_scale", group = "BIKE DYNAMICS", label = "Rear Wheel Rotational Scale", fmt = "%.2f", absMin = 0, absMax = 10 },
+    { key = "burnout_brake_mod_min", group = "BURNOUT & LAUNCH GRIP", label = "Minimum Brake Modifier", fmt = "%.3f", absMin = 0, absMax = 10 },
+    { key = "burnout_brake_mod_max", group = "BURNOUT & LAUNCH GRIP", label = "Maximum Brake Modifier", fmt = "%.2f", absMin = 0, absMax = 10 },
     { key = "bike_tilt_speed", group = "BIKE DYNAMICS", label = "Tilt Speed", fmt = "%.2f", absMin = 0, absMax = 50 },
     { key = "bike_tilt_return_speed", group = "BIKE DYNAMICS", label = "Tilt Return Speed", fmt = "%.2f", absMin = 0, absMax = 50 },
     { key = "bike_tilt_custom_speed", group = "BIKE DYNAMICS", label = "Custom Tilt Speed", fmt = "%.2f", absMin = 0, absMax = 50 },
     { key = "bike_max_tilt", group = "BIKE DYNAMICS", label = "Maximum Tilt", fmt = "%.1f deg", absMin = 0, absMax = 90 },
     { key = "bike_max_com_long", group = "BIKE DYNAMICS", label = "Maximum COM Longitudinal Offset", fmt = "%.3f m", absMin = -3, absMax = 3 },
     { key = "bike_min_com_long", group = "BIKE DYNAMICS", label = "Minimum COM Longitudinal Offset", fmt = "%.3f m", absMin = -3, absMax = 3 },
-    { key = "bike_com_damp", group = "BIKE DYNAMICS", label = "COM Offset Damping", fmt = "%.2f", absMin = 0, absMax = 20 },
+    { key = "bike_com_damping", group = "BIKE DYNAMICS", label = "COM Offset Damping", fmt = "%.2f", absMin = 0, absMax = 20 },
 }
 
 for gear = 1, 8 do
@@ -283,7 +302,7 @@ for gear = 1, 8 do
     table.insert(PARAMS, { key = "gear_" .. gear .. "_max_speed", group = "INDIVIDUAL GEARS", label = "Gear " .. gear .. " Maximum Speed", fmt = "%.1f m/s", absMin = 0, absMax = 400 })
     table.insert(PARAMS, { key = "gear_" .. gear .. "_min_rpm", group = "INDIVIDUAL GEARS", label = "Gear " .. gear .. " Minimum RPM", fmt = "%.0f", absMin = 0, absMax = 20000 })
     table.insert(PARAMS, { key = "gear_" .. gear .. "_max_rpm", group = "INDIVIDUAL GEARS", label = "Gear " .. gear .. " Maximum RPM", fmt = "%.0f", absMin = 0, absMax = 25000 })
-    table.insert(PARAMS, { key = "gear_" .. gear .. "_torque_mul", group = "INDIVIDUAL GEARS", label = "Gear " .. gear .. " Torque Multiplier", fmt = "%.2f x", absMin = 0, absMax = 10 })
+    table.insert(PARAMS, { key = "gear_" .. gear .. "_torque", group = "INDIVIDUAL GEARS", label = "Gear " .. gear .. " Torque Multiplier", fmt = "%.2f x", absMin = 0, absMax = 10 })
 end
 
 local GROUPS = {
@@ -295,7 +314,6 @@ local GROUPS = {
     "TIRES",
     "STEERING",
     "SPEED-SENSITIVE STEERING",
-    "ADVANCED STEERING & STABILITY",
     "GRIP & SLIP MODEL",
     "WHEEL CONTACT MODEL",
     "BRAKING",
@@ -313,6 +331,13 @@ local GROUPS = {
     "DOWNFORCE & AIR CONTROL",
     "BURNOUT & LAUNCH GRIP",
     "BIKE DYNAMICS",
+    "AIR CONTROL // GENERAL",
+    "AIR CONTROL // PITCH",
+    "AIR CONTROL // YAW",
+    "AIR CONTROL // ROLL",
+    "WATER & BUOYANCY",
+    "FLAT TIRE // FRONT",
+    "FLAT TIRE // REAR",
 }
 
 local DM = {
@@ -343,75 +368,29 @@ local DM = {
     bank_body_lr = "bankBodyLRTanMultiplier",
     body_friction = "bodyFriction",
     anti_sway_damping = "antiSwaybarDampingScalor",
-    turning_roll_weak_mul = "turningRollFactorWeakContactMul",
-    turning_roll_weak_min = "turningRollFactorWeakContactThresholdMin",
-    turning_roll_weak_max = "turningRollFactorWeakContactThresholdMax",
-    steer_wheel_max_force = "wheelMaxForce",
-    steer_wheel_resistance = "wheelResistanceRatio",
-    steer_stabilizer = "stabilizerFactor",
-    steer_body_roll_factor = "steeringAndBodyRollFactor",
-    steer_snap_angle = "snapToAxisMaxWheelTurnAngle",
-    steer_snap_speed = "snapToAxisVelocity",
-    steer_traction_control = "tractionControl",
-    steer_abs = "useABS",
+    turn_roll_weak_mul = "turningRollFactorWeakContactMul",
+    turn_roll_weak_min = "turningRollFactorWeakContactThresholdMin",
+    turn_roll_weak_max = "turningRollFactorWeakContactThresholdMax",
     slip_angle_min_speed = "slipAngleMinSpeedThreshold",
     slip_ratio_min_speed = "slipRatioMinSpeedThreshold",
-    slip_angle_lateral_factor = "slipAngleLateralFactor",
-    slip_angle_peak_factor = "slipAnglePeakFactor",
-    slip_angle_wheel_factor = "slipAngleWheelFactor",
-    slip_ratio_factor = "slipRatioFactor",
-    wheel_load_min = "wheelMinLoad",
-    wheel_load_factor = "wheelLoadFactor",
-    wheel_load_max = "wheelMaxLoad",
-    wheel_tire_factor = "wheelTireFactor",
     slope_traction_factor = "slopeTractionReductionFactor",
     slope_traction_begin = "slopeTractionReductionBegin",
     slope_traction_max = "slopeTractionReductionMax",
     slip_angle_curve_scale = "slipAngleCurveScale",
     slip_ratio_curve_scale = "slipRatioCurveScale",
-    contact_lateral_falloff = "lateralFrictionFalloff",
-    contact_long_falloff = "longitudinalFrictionFalloff",
-    contact_lateral_force_max = "lateralFrictionForceMax",
-    contact_lateral_force_max_rear = "lateralFrictionForceMaxRear",
-    contact_wheel_scale = "wheelFrictionScale",
-    contact_tire_scale = "tireFrictionScale",
-    contact_forward_sway = "forwardSway",
-    contact_side_sway = "sideSway",
-    contact_strength = "wheelContactStrength",
-    contact_sliding = "wheelContactSlidingFactor",
-    contact_friction_coeff = "wheelContactFrictionCoefficient",
-    contact_factor = "wheelContactFactor",
-    contact_drag = "wheelContactDrag",
-    contact_smooth_increase = "smoothWheelContactIncreseTime",
-    contact_smooth_decrease = "smoothWheelContactDecreaseTime",
+    contact_increase_time = "smoothWheelContactIncreseTime",
+    contact_decrease_time = "smoothWheelContactDecreaseTime",
     low_speed_stop_decel = "lowVelStoppingDeceleration",
     braking_friction_factor = "brakingFrictionFactor",
     differential_overshoot = "differentialOvershootFactor",
-    braking_estimation_factor = "brakingEstimationMagicFactor",
-    bike_lean_angle_zero = "leanAngleZeroSpeed",
-    bike_lean_angle_max = "leanAngleMaxSpeed",
-    bike_lean_angle_max_speed = "leanAngleMaxSpeedValue",
-    bike_lean_mult = "leanAngleMultiplier",
-    bike_lean_calc_ease = "leanCalcEase",
-    bike_lean_gravity_angle = "leanGravityAngle",
-    bike_lean_gravity_force = "leanGravityForce",
-    bike_lean_gravity_scale = "leanGravityScale",
-    bike_lean_target_speed = "leanTargetSpeed",
-    bike_lean_unlean_speed = "leanUnleanSpeed",
-    bike_lean_unlean_max_speed = "leanUnleanMaxSpeed",
-    bike_lean_unlean_max_speed_val = "leanUnleanMaxSpeedValue",
-    bike_turn_angle_zero = "turnAngleZeroSpeed",
-    bike_turn_angle_max = "turnAngleMaxSpeed",
-    bike_turn_max_speed = "turnMaxSpeed",
-    bike_lean_double_tap = "useLeanOnDoubleTap",
-    bike_rear_wheel_scale = "rearWheelRotationalScale",
+    braking_estimation = "brakingEstimationMagicFactor",
     bike_tilt_speed = "bikeTiltSpeed",
     bike_tilt_return_speed = "bikeTiltReturnSpeed",
     bike_tilt_custom_speed = "bikeTiltCustomSpeed",
     bike_max_tilt = "bikeMaxTilt",
     bike_max_com_long = "bikeMaxCOMLongOffset",
     bike_min_com_long = "bikeMinCOMLongOffset",
-    bike_com_damp = "bikeCOMOffsetDampFactor",
+    bike_com_damping = "bikeCOMOffsetDampFactor",
 }
 local VECTOR_DM = {
     center_of_mass_offset = { x = "com_x", y = "com_y", z = "com_z" },
@@ -421,39 +400,24 @@ local VECTOR_DM = {
 local ENG = {
     max_torque = "engineMaxTorque", resistance_torque = "resistanceTorque",
     max_rpm = "maxRPM",
-    engine_power_base = "basePower", engine_torque_base = "baseTorque",
-    engine_resistance_base = "baseResistanceTorque",
-    engine_fast_forward = "fastForwardFactor",
-    engine_force_reverse = "forceReverseRPM",
-    engine_min_rpm = "minRPM", engine_resistance_rpm = "resistanceRPM",
-    engine_torque_rpm = "torqueRPM",
-    engine_max_resistance = "maxResistanceTorque",
-    engine_min_resistance = "minResistanceTorque",
-    engine_min_torque = "minTorque",
-    engine_max_reverse_speed = "maxReverseSpeed",
-    engine_negative_torque = "negativeTorqueIfNotDriven",
-    engine_constant_torque = "constantTorque",
-    engine_gear_change_time = "gearChangeTime",
-    engine_clutch_speed = "clutchChangeSpeed",
-    engine_wheels_resistance = "wheelsResistanceRatio",
-    engine_resistance_current = "resistanceTorqueAtCurrentRPM",
-    engine_resistance_min = "resistanceTorqueAtMinRPM",
-    engine_resistance_max = "resistanceTorqueAtMaxRPM",
-    engine_torque_current = "torqueAtCurrentRPM",
-    engine_torque_min = "torqueAtMinRPM",
-    engine_torque_max = "torqueAtMaxRPM",
-    engine_gear_cooldown = "gearChangeCooldown",
-    engine_final_torque_decimation = "finalGearTorqueDecimationScalor",
-    engine_flywheel_inertia = "flyWheelMomentOfInertia",
-    engine_reverse_delay = "reverseDirDelay",
-    engine_fast_r1 = "fastR1GearChange",
-    engine_force_reverse_min = "forceReverseRPMToMin",
+    engine_min_rpm = "minRPM",
+    gear_change_time = "gearChangeTime",
+    wheel_resistance_ratio = "wheelsResistanceRatio",
+    gear_change_cooldown = "gearChangeCooldown",
+    final_gear_torque_decay = "finalGearTorqueDecimationScalor",
+    flywheel_inertia = "flyWheelMomentOfInertia",
+    reverse_direction_delay = "reverseDirDelay",
+    fast_r1_change = "fastR1GearChange",
+    force_reverse_min_rpm = "forceReverseRPMToMin",
 }
 local FRONT = {
     susp_front_spring = "springStiffness", susp_front_damp = "springDamping",
     susp_front_rebound = "springReboundDamping", susp_front_antiroll = "swaybarStiffness",
     tire_front_lat = "frictionMulLateral", tire_front_long = "frictionMulLongitudinal",
     brake_front = "maxBrakingTorque",
+    tire_front_base_friction = "tireFrictionCoef",
+    tire_front_rolling = "tireRollingResistanceCoef",
+    wheel_front_mass = "mass",
     front_sway_limit = "swaybarDisplacementLimit",
     front_sway_length = "swaybarLengthScalar",
     front_bound_low = "springBoundDampingLowRate",
@@ -474,6 +438,9 @@ local REAR = {
     susp_rear_rebound = "springReboundDamping", susp_rear_antiroll = "swaybarStiffness",
     tire_rear_lat = "frictionMulLateral", tire_rear_long = "frictionMulLongitudinal",
     brake_rear = "maxBrakingTorque",
+    tire_rear_base_friction = "tireFrictionCoef",
+    tire_rear_rolling = "tireRollingResistanceCoef",
+    wheel_rear_mass = "mass",
     rear_sway_limit = "swaybarDisplacementLimit",
     rear_sway_length = "swaybarLengthScalar",
     rear_bound_low = "springBoundDampingLowRate",
@@ -494,80 +461,124 @@ local REAR_ROLE = { rear_is_drive = "isDrive", rear_is_main_brake = "isMainBrake
 local FRONT_DIMENSIONS = { front_tire_radius = "tireRadius", front_rim_radius = "rimRadius", front_tire_width = "tireWidth", front_wheel_offset = "wheelOffset" }
 local REAR_DIMENSIONS = { rear_tire_radius = "tireRadius", rear_rim_radius = "rimRadius", rear_tire_width = "tireWidth", rear_wheel_offset = "wheelOffset" }
 local BURNOUT = {
-    burnout_max_speed = "maxSpeedToInitiateBurnOut",
-    burnout_lateral_force_max_accel = "lateralForceMaxAcceleration",
-    burnout_lateral_force_max_speed = "lateralForceMaxSpeed",
-    burnout_lateral_multiplier_max_speed = "lateralMultiplierMaxSpeed",
-    burnout_lateral_multiplier_min = "lateralMultiplierMin",
-    burnout_lateral_multiplier_max = "lateralMultiplierMax",
-    burnout_long_force_max_accel = "longitudinalForceMaxAcceleration",
-    burnout_long_force_max_speed = "longitudinalForceMaxSpeed",
-    burnout_long_multiplier_max_speed = "longitudinalMultiplierMaxSpeed",
-    burnout_long_multiplier_min = "longitudinalMultiplierMin",
-    burnout_long_multiplier_max = "longitudinalMultiplierMax",
-    burnout_lateral_decimation = "lateralAccelForwardSpeedMaxDecimation",
-    burnout_max_wheel_slip = "maxDriveWheelSlipRatio",
-    burnout_lateral_slip_influence = "lateralSlipRatioInfluence",
-    burnout_max_lat_accel_slip_mul = "maxLateralAccelSlipRatioMultipler",
-    burnout_max_long_friction_slip_mul = "maxLongFrictionSlipRatioMultipler",
-    burnout_min_long_slip_scaled = "minLongFrictionSlipRatioScaled",
-    burnout_min_long_friction = "minLongFrictionCoeff",
+    burnout_max_start_speed = "maxSpeedToInitiateBurnOut",
+    burnout_lat_accel_max = "lateralForceMaxAcceleration",
+    burnout_lat_speed_max = "lateralForceMaxSpeed",
+    burnout_forward_decay = "lateralAccelForwardSpeedMaxDecimation",
+    burnout_drive_slip_max = "maxDriveWheelSlipRatio",
+    burnout_lat_slip_influence = "lateralSlipRatioInfluence",
+    burnout_lat_accel_slip_mul = "maxLateralAccelSlipRatioMultipler",
+    burnout_long_friction_slip_mul = "maxLongFrictionSlipRatioMultipler",
+    burnout_long_friction_min_scaled = "minLongFrictionSlipRatioScaled",
+    burnout_long_coeff_min = "minLongFrictionCoeff",
     burnout_grip_bonus = "burnOutGripBonus",
     burnout_grip_speed_mul = "gripBonusMaxSpeedMultiplier",
     burnout_grip_launch_speed = "gripBonusMaxLaunchSpeed",
-    burnout_min_brake_modifier = "minBrakeForceModifier",
-    burnout_max_brake_modifier = "maxBrakeForceModifier",
+    burnout_brake_mod_min = "minBrakeForceModifier",
+    burnout_brake_mod_max = "maxBrakeForceModifier",
 }
 
+local AIR_CONTROL = { air_mass_reference = "massReference" }
+table.insert(PARAMS, { key = "air_mass_reference", group = "AIR CONTROL // GENERAL", label = "Mass Reference", fmt = "%.0f kg", absMin = 0, absMax = 10000 })
+
+local AIR_AXIS_FIELDS = {
+    { "max_velocity", "Maximum Velocity", "maxVelocity", "%.2f", 0, 100 },
+    { "no_input_brake", "No-Input Brake Multiplier", "brakeMultiplierWhenNoInput", "%.2f", 0, 20 },
+    { "input_damp", "Input Damping", "inputDampFactor", "%.2f", 0, 20 },
+    { "stabilize", "Stabilize Axis", "stabilizeAxis", nil, nil, nil, "bool" },
+    { "velocity_damp", "Velocity Damping", "velocityDampFactor", "%.2f", 0, 20 },
+    { "velocity_threshold_min", "Velocity Threshold Minimum", "velocityDampingThresholdMin", "%.2f", 0, 200 },
+    { "velocity_threshold_max", "Velocity Threshold Maximum", "velocityDampingThresholdMax", "%.2f", 0, 300 },
+    { "velocity_factor_min", "Velocity Factor Minimum", "velocityDampingFactorMin", "%.2f", -20, 20 },
+    { "velocity_factor_max", "Velocity Factor Maximum", "velocityDampingFactorMax", "%.2f", -20, 20 },
+    { "angle_damp", "Angle Damping", "angleDampFactor", "%.2f", 0, 20 },
+    { "angle_threshold_min", "Angle Threshold Minimum", "angleCorrectionThresholdMin", "%.1f deg", 0, 180 },
+    { "angle_threshold_max", "Angle Threshold Maximum", "angleCorrectionThresholdMax", "%.1f deg", 0, 180 },
+    { "angle_factor_min", "Angle Factor Minimum", "angleCorrectionFactorMin", "%.2f", -20, 20 },
+    { "angle_factor_max", "Angle Factor Maximum", "angleCorrectionFactorMax", "%.2f", -20, 20 },
+    { "velocity_compensation", "Maximum Velocity Compensation", "maxVelocityCompensation", "%.2f", 0, 500 },
+    { "angle_compensation", "Maximum Angle Compensation", "maxAngleCompensation", "%.2f", 0, 500 },
+    { "zero_angle", "Zero-Angle Threshold", "zeroAngleThreshold", "%.1f deg", 0, 180 },
+    { "compensation_angle", "Maximum Compensation Angle", "maxAngleToCompensateThreshold", "%.1f deg", 0, 360 },
+}
+
+local AIR_AXIS_MAPS = { pitch = {}, yaw = {}, roll = {} }
+for axis, map in pairs(AIR_AXIS_MAPS) do
+    local group = "AIR CONTROL // " .. axis:upper()
+    for _, spec in ipairs(AIR_AXIS_FIELDS) do
+        local key = "air_" .. axis .. "_" .. spec[1]
+        map[key] = spec[3]
+        if spec[7] == "bool" then
+            table.insert(PARAMS, { key = key, group = group, label = spec[2], type = "bool" })
+        else
+            table.insert(PARAMS, { key = key, group = group, label = spec[2], fmt = spec[4], absMin = spec[5], absMax = spec[6] })
+        end
+    end
+end
+
+local WATER = {
+    water_disable_engine = "disableEngine",
+    water_disable_air_control = "disableAirControl",
+    water_submerged_threshold = "submergedThreshold",
+    water_buoyancy = "buoyancyCoef",
+    water_linear_damping = "linearDampingCoef",
+    water_angular_damping = "angularDampingCoef",
+    water_impulse_min_speed = "minSpeedToApplyImpulses",
+    water_impulse_min_distance = "minDistanceBetweenImpulses",
+    water_impulse_radius = "impulseRadius",
+    water_impulse_strength = "impulseStrength",
+    water_impulse_overhang = "impulseOverhangDistance",
+    water_max_speed = "maxVehicleSpeed",
+    water_fall_strength_min = "impulseStrengthFallMultiplierMin",
+    water_fall_strength_max = "impulseStrengthFallMultiplierMax",
+    water_fall_vertical_threshold = "verticalVelocityThresholdForFallFx",
+    water_fall_depth_threshold = "depthThresholdForFallFx",
+    water_fx_min_distance = "minDistanceBetweenFx",
+}
+local WATER_PARAM_SPECS = {
+    { "water_disable_engine", "Disable Engine When Submerged", "bool" },
+    { "water_disable_air_control", "Disable Air Control When Submerged", "bool" },
+    { "water_submerged_threshold", "Submerged Threshold", "%.2f", 0, 10 },
+    { "water_buoyancy", "Buoyancy", "%.2f", -20, 20 },
+    { "water_linear_damping", "Linear Damping", "%.2f", 0, 20 },
+    { "water_angular_damping", "Angular Damping", "%.2f", 0, 20 },
+    { "water_impulse_min_speed", "Impulse Minimum Speed", "%.2f m/s", 0, 100 },
+    { "water_impulse_min_distance", "Minimum Impulse Distance", "%.2f m", 0, 20 },
+    { "water_impulse_radius", "Impulse Radius", "%.2f m", 0, 20 },
+    { "water_impulse_strength", "Impulse Strength", "%.4f", -100, 100 },
+    { "water_impulse_overhang", "Impulse Overhang Distance", "%.2f m", 0, 20 },
+    { "water_max_speed", "Maximum Water Speed", "%.1f m/s", 0, 200 },
+    { "water_fall_strength_min", "Fall Strength Minimum", "%.2f", 0, 100 },
+    { "water_fall_strength_max", "Fall Strength Maximum", "%.2f", 0, 100 },
+    { "water_fall_vertical_threshold", "Fall Vertical-Velocity Threshold", "%.2f m/s", -100, 100 },
+    { "water_fall_depth_threshold", "Fall Depth Threshold", "%.2f m", 0, 20 },
+    { "water_fx_min_distance", "Minimum FX Distance", "%.2f m", 0, 20 },
+}
+for _, spec in ipairs(WATER_PARAM_SPECS) do
+    if spec[3] == "bool" then
+        table.insert(PARAMS, { key = spec[1], group = "WATER & BUOYANCY", label = spec[2], type = "bool" })
+    else
+        table.insert(PARAMS, { key = spec[1], group = "WATER & BUOYANCY", label = spec[2], fmt = spec[3], absMin = spec[4], absMax = spec[5] })
+    end
+end
+
+local FLAT_TIRE_FIELDS = {
+    { "lateral_friction", "Lateral Friction Decimation", "lateralFrictionDecimation", "%.2f", 0, 10 },
+    { "longitudinal_friction", "Longitudinal Friction Decimation", "longitudinalFrictionDecimation", "%.2f", 0, 10 },
+    { "rotation_resistance", "Rotation Resistance Torque", "rotationResistanceTorque", "%.0f Nm", 0, 10000 },
+    { "blowout_impulse", "Blowout Impulse", "blowOutImpulse", "%.0f", 0, 10000 },
+}
+local FLAT_TIRE_MAPS = { front = {}, rear = {} }
+for axle, map in pairs(FLAT_TIRE_MAPS) do
+    local group = "FLAT TIRE // " .. axle:upper()
+    for _, spec in ipairs(FLAT_TIRE_FIELDS) do
+        local key = "flat_" .. axle .. "_" .. spec[1]
+        map[key] = spec[3]
+        table.insert(PARAMS, { key = key, group = group, label = spec[2], fmt = spec[4], absMin = spec[5], absMax = spec[6] })
+    end
+end
+
 local HELPER_SPECS = {
-    { "rotation_limiter", "ROTATION & DRIFT LIMITER", "min_speed", "Minimum Speed", "minSpeed", "%.1f m/s", 0, 200 },
-    { "rotation_limiter", "ROTATION & DRIFT LIMITER", "max_speed", "Maximum Speed", "maxSpeed", "%.1f m/s", 0, 300 },
-    { "rotation_limiter", "ROTATION & DRIFT LIMITER", "min_angle", "Minimum Angle", "minAngle", "%.1f deg", 0, 180 },
-    { "rotation_limiter", "ROTATION & DRIFT LIMITER", "max_angle", "Maximum Angle", "maxAngle", "%.1f deg", 0, 180 },
-    { "rotation_limiter", "ROTATION & DRIFT LIMITER", "max_yaw", "Maximum Yaw Speed", "maxYawSpeed", "%.2f", 0, 50 },
-    { "rotation_limiter", "ROTATION & DRIFT LIMITER", "min_yaw", "Minimum Yaw Speed", "minYawSpeed", "%.2f", 0, 50 },
-    { "rotation_limiter", "ROTATION & DRIFT LIMITER", "yaw_mul", "Yaw Multiplier", "yawMultiplier", "%.2f", 0, 10 },
-    { "rotation_limiter", "ROTATION & DRIFT LIMITER", "countersteer", "Countersteer Factor", "counterSteerFactor", "%.2f", 0, 10 },
-    { "rotation_limiter", "ROTATION & DRIFT LIMITER", "stabilization", "Stabilization Factor", "stabilizationFactor", "%.2f", 0, 10 },
-    { "rotation_limiter", "ROTATION & DRIFT LIMITER", "steering", "Steering Factor", "steeringFactor", "%.2f", 0, 10 },
-    { "rotation_limiter", "ROTATION & DRIFT LIMITER", "braking", "Braking Factor", "brakingFactor", "%.2f", 0, 10 },
-    { "rotation_limiter", "ROTATION & DRIFT LIMITER", "acceleration", "Acceleration Factor", "accelerationFactor", "%.2f", 0, 10 },
-    { "rear_grip", "DYNAMIC REAR GRIP", "min_speed", "Minimum Speed", "minSpeed", "%.1f m/s", 0, 200 },
-    { "rear_grip", "DYNAMIC REAR GRIP", "max_speed", "Maximum Speed", "maxSpeed", "%.1f m/s", 0, 300 },
-    { "rear_grip", "DYNAMIC REAR GRIP", "min_mul", "Minimum Friction Multiplier", "minFrictionMultiplier", "%.2f", 0, 10 },
-    { "rear_grip", "DYNAMIC REAR GRIP", "max_mul", "Maximum Friction Multiplier", "maxFrictionMultiplier", "%.2f", 0, 10 },
-    { "rear_grip", "DYNAMIC REAR GRIP", "slip_min", "Minimum Slip Angle", "minSlipAngle", "%.1f deg", 0, 180 },
-    { "rear_grip", "DYNAMIC REAR GRIP", "slip_max", "Maximum Slip Angle", "maxSlipAngle", "%.1f deg", 0, 180 },
-    { "rear_grip", "DYNAMIC REAR GRIP", "input_min", "Minimum Input", "minInput", "%.2f", 0, 1 },
-    { "rear_grip", "DYNAMIC REAR GRIP", "input_max", "Maximum Input", "maxInput", "%.2f", 0, 1 },
-    { "handbrake_helper", "HANDBRAKE GRIP HELPER", "min_speed", "Minimum Speed", "minSpeed", "%.1f m/s", 0, 200 },
-    { "handbrake_helper", "HANDBRAKE GRIP HELPER", "max_speed", "Maximum Speed", "maxSpeed", "%.1f m/s", 0, 300 },
-    { "handbrake_helper", "HANDBRAKE GRIP HELPER", "min_mul", "Minimum Friction Multiplier", "minFrictionMultiplier", "%.2f", 0, 10 },
-    { "handbrake_helper", "HANDBRAKE GRIP HELPER", "max_mul", "Maximum Friction Multiplier", "maxFrictionMultiplier", "%.2f", 0, 10 },
-    { "handbrake_helper", "HANDBRAKE GRIP HELPER", "min_time", "Minimum Time", "minTime", "%.2f s", 0, 20 },
-    { "handbrake_helper", "HANDBRAKE GRIP HELPER", "max_time", "Maximum Time", "maxTime", "%.2f s", 0, 20 },
-    { "uphill_helper", "TRACTION & ACCELERATION HELPERS", "min_speed", "Uphill Minimum Speed", "minSpeed", "%.1f m/s", 0, 200 },
-    { "uphill_helper", "TRACTION & ACCELERATION HELPERS", "max_speed", "Uphill Maximum Speed", "maxSpeed", "%.1f m/s", 0, 300 },
-    { "uphill_helper", "TRACTION & ACCELERATION HELPERS", "min_angle", "Uphill Minimum Angle", "minAngle", "%.1f deg", 0, 90 },
-    { "uphill_helper", "TRACTION & ACCELERATION HELPERS", "max_angle", "Uphill Maximum Angle", "maxAngle", "%.1f deg", 0, 90 },
-    { "uphill_helper", "TRACTION & ACCELERATION HELPERS", "min_mul", "Uphill Minimum Multiplier", "minMultiplier", "%.2f", 0, 20 },
-    { "uphill_helper", "TRACTION & ACCELERATION HELPERS", "max_mul", "Uphill Maximum Multiplier", "maxMultiplier", "%.2f", 0, 20 },
-    { "accel_noise", "TRACTION & ACCELERATION HELPERS", "min_speed", "Acceleration Noise Min Speed", "minSpeed", "%.1f m/s", 0, 200 },
-    { "accel_noise", "TRACTION & ACCELERATION HELPERS", "max_speed", "Acceleration Noise Max Speed", "maxSpeed", "%.1f m/s", 0, 300 },
-    { "accel_noise", "TRACTION & ACCELERATION HELPERS", "min_mul", "Acceleration Noise Min Multiplier", "minMultiplier", "%.2f", 0, 20 },
-    { "accel_noise", "TRACTION & ACCELERATION HELPERS", "max_mul", "Acceleration Noise Max Multiplier", "maxMultiplier", "%.2f", 0, 20 },
-    { "accel_noise", "TRACTION & ACCELERATION HELPERS", "frequency", "Acceleration Noise Frequency", "frequency", "%.2f Hz", 0, 100 },
-    { "accel_noise", "TRACTION & ACCELERATION HELPERS", "amplitude", "Acceleration Noise Amplitude", "amplitude", "%.2f", 0, 20 },
-    { "downforce", "DOWNFORCE & AIR CONTROL", "min_speed", "Downforce Minimum Speed", "minSpeed", "%.1f m/s", 0, 200 },
-    { "downforce", "DOWNFORCE & AIR CONTROL", "max_speed", "Downforce Maximum Speed", "maxSpeed", "%.1f m/s", 0, 300 },
-    { "downforce", "DOWNFORCE & AIR CONTROL", "min_mul", "Downforce Minimum Multiplier", "minMultiplier", "%.2f", 0, 50 },
-    { "downforce", "DOWNFORCE & AIR CONTROL", "max_mul", "Downforce Maximum Multiplier", "maxMultiplier", "%.2f", 0, 50 },
-    { "downforce", "DOWNFORCE & AIR CONTROL", "front", "Front Downforce Factor", "frontFactor", "%.2f", 0, 20 },
-    { "downforce", "DOWNFORCE & AIR CONTROL", "rear", "Rear Downforce Factor", "rearFactor", "%.2f", 0, 20 },
-    { "air_gravity", "DOWNFORCE & AIR CONTROL", "min_time", "Air Gravity Minimum Time", "minTime", "%.2f s", 0, 20 },
-    { "air_gravity", "DOWNFORCE & AIR CONTROL", "max_time", "Air Gravity Maximum Time", "maxTime", "%.2f s", 0, 20 },
-    { "air_gravity", "DOWNFORCE & AIR CONTROL", "min_mul", "Air Gravity Minimum Multiplier", "minMultiplier", "%.2f", 0, 20 },
-    { "air_gravity", "DOWNFORCE & AIR CONTROL", "max_mul", "Air Gravity Maximum Multiplier", "maxMultiplier", "%.2f", 0, 20 },
     { "rotation", "ROTATION & DRIFT LIMITER", "max_angular", "Maximum Angular Speed", "maxAngularSpeedRad", "%.2f rad/s", 0, 20 },
     { "rotation", "ROTATION & DRIFT LIMITER", "handbrake_limit", "Handbrake Rotation Limit", "handbrakeLimit", "%.2f", 0, 20 },
     { "rotation", "ROTATION & DRIFT LIMITER", "drift_limit", "Drift Rotation Limit", "driftLimit", "%.2f", 0, 20 },
@@ -577,40 +588,40 @@ local HELPER_SPECS = {
     { "rotation", "ROTATION & DRIFT LIMITER", "drift_vel_max", "Drift Limit Maximum Speed", "driftLimitMaxVel", "%.1f m/s", 0, 300 },
     { "rotation", "ROTATION & DRIFT LIMITER", "exceeded_angle", "Drift Exceeded Angle", "driftExceededAngle", "%.1f deg", 0, 180 },
     { "rotation", "ROTATION & DRIFT LIMITER", "smoothing", "Rotation Smoothing Time", "smoothingTime", "%.3f s", 0, 10 },
-    { "rear_helper", "DYNAMIC REAR GRIP", "min_long_slip", "Minimum Longitudinal Slip", "minLongSlipRatio", "%.2f", 0, 20 },
-    { "rear_helper", "DYNAMIC REAR GRIP", "max_long_slip", "Maximum Longitudinal Slip", "maxLongSlipRatio", "%.2f", 0, 20 },
-    { "rear_helper", "DYNAMIC REAR GRIP", "min_lat_slip", "Minimum Lateral Slip", "minLatSlipRatio", "%.2f", 0, 20 },
-    { "rear_helper", "DYNAMIC REAR GRIP", "max_lat_slip", "Maximum Lateral Slip", "maxLatSlipRatio", "%.2f", 0, 20 },
-    { "rear_helper", "DYNAMIC REAR GRIP", "min_long_coef", "Minimum Longitudinal Friction", "minLongFrictionCoef", "%.2f", 0, 10 },
-    { "rear_helper", "DYNAMIC REAR GRIP", "min_lat_coef", "Minimum Lateral Friction", "minLatFrictionCoef", "%.2f", 0, 10 },
+    { "rear_helper", "DYNAMIC REAR GRIP", "long_slip_min", "Minimum Longitudinal Slip", "minLongSlipRatio", "%.2f", 0, 20 },
+    { "rear_helper", "DYNAMIC REAR GRIP", "long_slip_max", "Maximum Longitudinal Slip", "maxLongSlipRatio", "%.2f", 0, 20 },
+    { "rear_helper", "DYNAMIC REAR GRIP", "lat_slip_min", "Minimum Lateral Slip", "minLatSlipRatio", "%.2f", 0, 20 },
+    { "rear_helper", "DYNAMIC REAR GRIP", "lat_slip_max", "Maximum Lateral Slip", "maxLatSlipRatio", "%.2f", 0, 20 },
+    { "rear_helper", "DYNAMIC REAR GRIP", "long_friction_min", "Minimum Longitudinal Friction", "minLongFrictionCoef", "%.2f", 0, 10 },
+    { "rear_helper", "DYNAMIC REAR GRIP", "lat_friction_min", "Minimum Lateral Friction", "minLatFrictionCoef", "%.2f", 0, 10 },
     { "rear_helper", "DYNAMIC REAR GRIP", "max_speed", "Maximum Helper Speed", "maxSpeed", "%.1f m/s", 0, 300 },
     { "rear_helper", "DYNAMIC REAR GRIP", "max_accel", "Maximum Helper Acceleration", "maxHelperAcceleration", "%.2f", 0, 100 },
-    { "handbrake", "HANDBRAKE GRIP HELPER", "lat_coef", "Rear Lateral Friction", "rearWheelsLatFrictionCoef", "%.2f", 0, 10 },
-    { "handbrake", "HANDBRAKE GRIP HELPER", "long_coef", "Rear Longitudinal Friction", "rearWheelsLongFrictionCoef", "%.2f", 0, 10 },
-    { "handbrake", "HANDBRAKE GRIP HELPER", "blend_out", "Blend-Out Time", "blendOutTime", "%.3f s", 0, 20 },
-    { "handbrake", "HANDBRAKE GRIP HELPER", "long_brake", "Additional Brake for Long Use", "additionalBrakeForLongUse", "%.2f", 0, 10 },
-    { "handbrake", "HANDBRAKE GRIP HELPER", "traction_boost", "Post-Handbrake Traction Boost", "postHandbrakeTractionBoost", "%.2f", 0, 20 },
+    { "handbrake", "HANDBRAKE GRIP HELPER", "lat_friction", "Rear Lateral Friction", "rearWheelsLatFrictionCoef", "%.2f", 0, 10 },
+    { "handbrake", "HANDBRAKE GRIP HELPER", "long_friction", "Rear Longitudinal Friction", "rearWheelsLongFrictionCoef", "%.2f", 0, 10 },
+    { "handbrake", "HANDBRAKE GRIP HELPER", "blend_time", "Blend-Out Time", "blendOutTime", "%.3f s", 0, 20 },
+    { "handbrake", "HANDBRAKE GRIP HELPER", "extra_brake", "Additional Brake for Long Use", "additionalBrakeForLongUse", "%.2f", 0, 10 },
+    { "handbrake", "HANDBRAKE GRIP HELPER", "post_grip", "Post-Handbrake Traction Boost", "postHandbrakeTractionBoost", "%.2f", 0, 20 },
     { "uphill", "TRACTION & ACCELERATION HELPERS", "factor", "Uphill Compensation Factor", "slopeCompensationFactor", "%.2f", 0, 20 },
     { "uphill", "TRACTION & ACCELERATION HELPERS", "max_angle", "Uphill Maximum Angle", "slopeCompensationMaxAngle", "%.1f deg", 0, 90 },
-    { "accel", "TRACTION & ACCELERATION HELPERS", "boost", "Acceleration Boost", "accelerationBoost", "%.2f", 0, 20 },
-    { "accel", "TRACTION & ACCELERATION HELPERS", "boost_reverse", "Reverse Acceleration Boost", "accelerationBoostReverse", "%.2f", 0, 20 },
-    { "accel", "TRACTION & ACCELERATION HELPERS", "boost_max_speed", "Boost Maximum Speed", "accelerationBoostMaxSpeed", "%.1f m/s", 0, 300 },
-    { "accel", "TRACTION & ACCELERATION HELPERS", "min_force_diff", "Minimum Force Difference", "minForcesDifference", "%.2f", 0, 20 },
-    { "accel", "TRACTION & ACCELERATION HELPERS", "max_force_diff", "Maximum Force Difference", "maxForcesDifference", "%.2f", 0, 20 },
-    { "accel", "TRACTION & ACCELERATION HELPERS", "min_time", "Minimum Apply Time", "minApplyTime", "%.2f s", 0, 20 },
-    { "accel", "TRACTION & ACCELERATION HELPERS", "max_time", "Maximum Apply Time", "maxApplyTime", "%.2f s", 0, 20 },
-    { "accel", "TRACTION & ACCELERATION HELPERS", "noise_max_speed", "Noise Maximum Speed", "accelerationNoiseMaxSpeed", "%.1f m/s", 0, 300 },
-    { "downforce_real", "DOWNFORCE & AIR CONTROL", "min_speed", "Downforce Minimum Speed", "minSpeed", "%.1f m/s", 0, 200 },
-    { "downforce_real", "DOWNFORCE & AIR CONTROL", "max_speed", "Downforce Maximum Speed", "maxSpeed", "%.1f m/s", 0, 300 },
-    { "downforce_real", "DOWNFORCE & AIR CONTROL", "ground", "Maximum Ground Factor", "maxSpeedFactorGround", "%.2f", 0, 20 },
-    { "downforce_real", "DOWNFORCE & AIR CONTROL", "air", "Maximum Air Factor", "maxSpeedFactorAir", "%.2f", 0, 20 },
-    { "air", "DOWNFORCE & AIR CONTROL", "smoothing", "In-Air Smoothing", "smoothingFactor", "%.2f", 0, 20 },
-    { "air", "DOWNFORCE & AIR CONTROL", "base_gravity", "Base Added Gravity", "baseAddedGravity", "%.2f", -20, 20 },
-    { "air", "DOWNFORCE & AIR CONTROL", "min_speed", "Gravity Minimum Drive Speed", "minDriveSpeed", "%.1f m/s", 0, 200 },
-    { "air", "DOWNFORCE & AIR CONTROL", "max_speed", "Gravity Maximum Drive Speed", "maxDriveSpeed", "%.1f m/s", 0, 300 },
-    { "air", "DOWNFORCE & AIR CONTROL", "speed_gravity", "Drive-Speed Added Gravity", "driveSpeedAddedGravity", "%.2f", -20, 20 },
-    { "air", "DOWNFORCE & AIR CONTROL", "z_start", "Vertical Reduction Start", "zVelReductionStart", "%.2f m/s", -100, 100 },
-    { "air", "DOWNFORCE & AIR CONTROL", "z_end", "Vertical Reduction End", "zVelReductionEnd", "%.2f m/s", -100, 100 },
+    { "accel_noise", "TRACTION & ACCELERATION HELPERS", "boost", "Acceleration Boost", "accelerationBoost", "%.2f", 0, 20 },
+    { "accel_noise", "TRACTION & ACCELERATION HELPERS", "reverse", "Reverse Acceleration Boost", "accelerationBoostReverse", "%.2f", 0, 20 },
+    { "accel_noise", "TRACTION & ACCELERATION HELPERS", "boost_speed", "Boost Maximum Speed", "accelerationBoostMaxSpeed", "%.1f m/s", 0, 300 },
+    { "accel_noise", "TRACTION & ACCELERATION HELPERS", "force_min", "Minimum Force Difference", "minForcesDifference", "%.2f", 0, 20 },
+    { "accel_noise", "TRACTION & ACCELERATION HELPERS", "force_max", "Maximum Force Difference", "maxForcesDifference", "%.2f", 0, 20 },
+    { "accel_noise", "TRACTION & ACCELERATION HELPERS", "time_min", "Minimum Apply Time", "minApplyTime", "%.2f s", 0, 20 },
+    { "accel_noise", "TRACTION & ACCELERATION HELPERS", "time_max", "Maximum Apply Time", "maxApplyTime", "%.2f s", 0, 20 },
+    { "accel_noise", "TRACTION & ACCELERATION HELPERS", "max_speed", "Noise Maximum Speed", "accelerationNoiseMaxSpeed", "%.1f m/s", 0, 300 },
+    { "downforce", "DOWNFORCE & AIR CONTROL", "min_speed", "Downforce Minimum Speed", "minSpeed", "%.1f m/s", 0, 200 },
+    { "downforce", "DOWNFORCE & AIR CONTROL", "max_speed", "Downforce Maximum Speed", "maxSpeed", "%.1f m/s", 0, 300 },
+    { "downforce", "DOWNFORCE & AIR CONTROL", "ground_factor", "Maximum Ground Factor", "maxSpeedFactorGround", "%.2f", 0, 20 },
+    { "downforce", "DOWNFORCE & AIR CONTROL", "air_factor", "Maximum Air Factor", "maxSpeedFactorAir", "%.2f", 0, 20 },
+    { "air", "DOWNFORCE & AIR CONTROL", "gravity_smoothing", "In-Air Smoothing", "smoothingFactor", "%.2f", 0, 20 },
+    { "air", "DOWNFORCE & AIR CONTROL", "gravity_base", "Base Added Gravity", "baseAddedGravity", "%.2f", -20, 20 },
+    { "air", "DOWNFORCE & AIR CONTROL", "gravity_speed_min", "Gravity Minimum Drive Speed", "minDriveSpeed", "%.1f m/s", 0, 200 },
+    { "air", "DOWNFORCE & AIR CONTROL", "gravity_speed_max", "Gravity Maximum Drive Speed", "maxDriveSpeed", "%.1f m/s", 0, 300 },
+    { "air", "DOWNFORCE & AIR CONTROL", "gravity_speed_add", "Drive-Speed Added Gravity", "driveSpeedAddedGravity", "%.2f", -20, 20 },
+    { "air", "DOWNFORCE & AIR CONTROL", "z_reduction_start", "Vertical Reduction Start", "zVelReductionStart", "%.2f m/s", -100, 100 },
+    { "air", "DOWNFORCE & AIR CONTROL", "z_reduction_end", "Vertical Reduction End", "zVelReductionEnd", "%.2f m/s", -100, 100 },
 }
 
 local HELPER_MAPS = {}
@@ -664,6 +675,37 @@ local function migrateLegacyKeys(target)
             end
         end
         for _, oldId in ipairs(legacy) do target[oldId] = nil end
+    end
+end
+
+local PARAM_KEY_ALIASES = {
+    burnout_max_speed = "burnout_max_start_speed",
+    burnout_lateral_force_max_accel = "burnout_lat_accel_max",
+    burnout_lateral_force_max_speed = "burnout_lat_speed_max",
+    engine_gear_change_time = "gear_change_time",
+    engine_wheels_resistance = "wheel_resistance_ratio",
+    susp_front_swaybar_disp_limit = "front_sway_limit",
+    susp_front_swaybar_length_scalar = "front_sway_length",
+    susp_rear_swaybar_disp_limit = "rear_sway_limit",
+    susp_rear_swaybar_length_scalar = "rear_sway_length",
+    rear_grip_max_speed = "rear_helper_max_speed",
+    bike_com_damp = "bike_com_damping",
+}
+
+for gear = 1, 8 do
+    PARAM_KEY_ALIASES["gear_" .. gear .. "_torque_mul"] = "gear_" .. gear .. "_torque"
+end
+
+local function migrateParamKeys(target)
+    for _, params in pairs(target) do
+        if type(params) == "table" then
+            for oldKey, newKey in pairs(PARAM_KEY_ALIASES) do
+                if params[newKey] == nil and params[oldKey] ~= nil then
+                    params[newKey] = params[oldKey]
+                end
+                params[oldKey] = nil
+            end
+        end
     end
 end
 
@@ -762,6 +804,10 @@ local function resolveChain(vehId)
             burnoutId = nil,
             gearIds = {},
             helperIds = {},
+            airControlId = nil,
+            airAxisIds = {},
+            waterId = nil,
+            flatTireIds = {},
         }
 
         local engRec = rec:VehEngineData()
@@ -777,6 +823,17 @@ local function resolveChain(vehId)
 
         local burnoutOk, burnoutRec = pcall(function() return dmRec:BurnOut() end)
         if burnoutOk and burnoutRec then chain.burnoutId = burnoutRec:GetID() end
+
+        local waterOk, waterRec = pcall(function() return dmRec:WaterParams() end)
+        if waterOk and waterRec then chain.waterId = waterRec:GetID() end
+
+        local flatOk, flatRec = pcall(function() return dmRec:FlatTireSim() end)
+        if flatOk and flatRec then
+            local frontOk, frontRec = pcall(function() return flatRec:Front() end)
+            if frontOk and frontRec then chain.flatTireIds.front = frontRec:GetID() end
+            local rearOk, rearRec = pcall(function() return flatRec:Rear() end)
+            if rearOk and rearRec then chain.flatTireIds.rear = rearRec:GetID() end
+        end
 
         local helperTypes = {
             rotationlimiter = "rotation_limiter",
@@ -810,6 +867,20 @@ local function resolveChain(vehId)
         chain.helperIds.accel = chain.helperIds.accel_noise
         chain.helperIds.downforce_real = chain.helperIds.downforce
         chain.helperIds.air = chain.helperIds.air_gravity
+
+        local airOk, airRec = pcall(function() return rec:VehAirControl() end)
+        if airOk and airRec then
+            chain.airControlId = airRec:GetID()
+            local axisGetters = {
+                pitch = function() return airRec:Pitch() end,
+                yaw = function() return airRec:Yaw() end,
+                roll = function() return airRec:Roll() end,
+            }
+            for axis, getter in pairs(axisGetters) do
+                local axisOk, axisRec = pcall(getter)
+                if axisOk and axisRec then chain.airAxisIds[axis] = axisRec:GetID() end
+            end
+        end
 
         local dimensionsOk, dimensions = pcall(function() return rec:VehWheelDimensionsSetup() end)
         if dimensionsOk and dimensions then
@@ -976,7 +1047,7 @@ end
 local GEAR_FLATS = {
     min_speed = "minSpeed", max_speed = "maxSpeed",
     min_rpm = "minEngineRPM", max_rpm = "maxEngineRPM",
-    torque_mul = "torqueMultiplier",
+    torque = "torqueMultiplier",
 }
 
 local function readGearMaps(gearIds, params)
@@ -1039,6 +1110,14 @@ local function readVehicle(vehId)
     readFirstMap(chain.rearRoleIds, REAR_ROLE, params)
     readMap(chain.burnoutId, BURNOUT, params)
     readHelperMaps(chain.helperIds, params)
+    readMap(chain.airControlId, AIR_CONTROL, params)
+    for axis, map in pairs(AIR_AXIS_MAPS) do
+        readMap(chain.airAxisIds[axis], map, params)
+    end
+    readMap(chain.waterId, WATER, params)
+    for axle, map in pairs(FLAT_TIRE_MAPS) do
+        readMap(chain.flatTireIds[axle], map, params)
+    end
     if chain.frontId then readMap(chain.frontId, FRONT, params) end
     if chain.rearId and not chain.rearShared then
         readMap(chain.rearId, REAR, params)
@@ -1074,6 +1153,14 @@ local function writeVehicle(vehId, params)
         applyMaps(chain.rearRoleIds, REAR_ROLE, params)
         applyMap(chain.burnoutId, BURNOUT, params)
         applyHelperMaps(chain.helperIds, params)
+        applyMap(chain.airControlId, AIR_CONTROL, params)
+        for axis, map in pairs(AIR_AXIS_MAPS) do
+            applyMap(chain.airAxisIds[axis], map, params)
+        end
+        applyMap(chain.waterId, WATER, params)
+        for axle, map in pairs(FLAT_TIRE_MAPS) do
+            applyMap(chain.flatTireIds[axle], map, params)
+        end
 
         if chain.frontId then
             table.insert(appliedList, "FRONT: " .. TDBID.ToStringDEBUG(chain.frontId))
@@ -1449,6 +1536,20 @@ local function selectMounted(silent)
             end
         end
     end
+
+    -- A mounted record is the final authority. This also supports a new game
+    -- record or a custom vehicle that is absent from the official garage list.
+    local mountedVehicle = {
+        id = mounted,
+        name = friendlyVehicleName(mounted),
+        class = mounted:lower():find("sportbike", 1, true) and "Bike" or "Mounted Vehicle",
+    }
+    local _, params = firstReadableId(mountedVehicle)
+    if params and next(params) then
+        table.insert(VEHICLES, mountedVehicle)
+        return selectMatch(#VEHICLES, mountedVehicle)
+    end
+
     if not silent then statusMessage = "Mounted vehicle is not in the list: " .. mounted end
     return false
 end
@@ -1578,7 +1679,7 @@ local function drawUI()
     ImGui.SetNextWindowSize(720, 820, ImGuiCond.FirstUseEver)
     pushWindowStyle()
     local ok, err = pcall(function()
-    if ImGui.Begin("Vehicle Physics Config // indigo-nx") then
+    if ImGui.Begin("Vehicle Physics Config") then
         if not tdbReady then
             ImGui.TextWrapped("Waiting for TweakDB... reload CET mods after the session has started.")
         else
@@ -1687,6 +1788,8 @@ local function drawUI()
 end
 
 registerForEvent("onInit", function()
+    discoverOfficialVehicles()
+
     local stockData = loadJSON(STOCK_FILE)
     if type(stockData) == "table" then stock = stockData end
 
@@ -1704,6 +1807,8 @@ registerForEvent("onInit", function()
     end
     migrateLegacyKeys(stock)
     migrateLegacyKeys(saved)
+    migrateParamKeys(stock)
+    migrateParamKeys(saved)
 
     captureMissingStock()
     applySaved()

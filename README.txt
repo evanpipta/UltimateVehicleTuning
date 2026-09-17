@@ -74,7 +74,9 @@ PARAMETERS
   load and contact behavior; front/rear basic and advanced suspension; brakes;
   engine response and individual gears; drivetrain/brake roles; wheel geometry;
   rotation/drift limiting; dynamic rear grip; handbrake, traction, acceleration,
-  downforce and in-air helpers; burnout/launch behavior; and bike dynamics.
+  downforce and in-air helpers; burnout/launch behavior; bike dynamics; pitch,
+  yaw and roll air control; water/buoyancy behavior; and front/rear flat-tire
+  simulation.
 
   Speed thresholds are shown in metres per second (10 m/s = 36 km/h).
   Every slider has a fixed absolute range shared by all vehicles. Values start
