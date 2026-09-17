@@ -314,13 +314,13 @@ local GROUPS = {
     "TIRES",
     "STEERING",
     "SPEED-SENSITIVE STEERING",
+    "BRAKING",
+    "INDIVIDUAL GEARS",
     "GRIP & SLIP MODEL",
     "WHEEL CONTACT MODEL",
-    "BRAKING",
     "ADVANCED SUSPENSION // FRONT",
     "ADVANCED SUSPENSION // REAR",
     "ENGINE RESPONSE",
-    "INDIVIDUAL GEARS",
     "DRIVETRAIN & BRAKE ROLES",
     "WHEEL GEOMETRY // FRONT",
     "WHEEL GEOMETRY // REAR",
@@ -635,6 +635,7 @@ for _, spec in ipairs(HELPER_SPECS) do
 end
 
 local showOverlay = false
+local showAdvanced = false
 local selected = 1
 local edit = {}
 local stock = {}
@@ -1614,7 +1615,7 @@ local function drawGroup(groupName)
         end
     end
 
-    if groupName == "STEERING" or groupName == "SPEED-SENSITIVE STEERING" then
+    if groupName == "SPEED-SENSITIVE STEERING" then
         ImGui.Spacing()
         if ImGui.Button("APPLY THIS SECTION TO ALL VEHICLES###apply_all_" .. groupName, width, 28) then
             applyGroupToAll(groupName)
@@ -1725,8 +1726,18 @@ local function drawUI()
             end
 
             ImGui.Separator()
+            local advancedGroup = false
             for _, group in ipairs(GROUPS) do
-                drawGroup(group)
+                if group == "GRIP & SLIP MODEL" then
+                    ImGui.Separator()
+                    local advancedValue, advancedChanged = ImGui.Checkbox("Show advanced", showAdvanced)
+                    if advancedChanged then showAdvanced = advancedValue end
+                    ImGui.Separator()
+                    advancedGroup = true
+                end
+                if not advancedGroup or showAdvanced then
+                    drawGroup(group)
+                end
             end
 
             if #appliedList > 0 then

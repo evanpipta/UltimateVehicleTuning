@@ -1,5 +1,4 @@
 Ultimate Vehicle Tuning v1.3
-by indigo-nx
 CET UI restored locally — no desktop exe required.
 
 In-game CET overlay for tuning vehicle physics in Cyberpunk 2077.
@@ -59,8 +58,8 @@ HOW TO USE
   Changed values highlight green. Expand "Apply log" to confirm every
   TweakDB write with [OK] or [MISS].
 
-  The Steering and Speed-Sensitive Steering panels each include a button
-  that copies only that section's exact absolute values to every vehicle.
+  The Speed-Sensitive Steering panel includes a button that copies that
+  section's exact absolute values to every vehicle.
   Existing tunes in all other sections are preserved.
 
   Tunes are saved to config.json in this mod folder and restored on the
@@ -83,6 +82,9 @@ PARAMETERS
   at each vehicle's captured vanilla defaults. The Reset button beside an
   individual control restores and immediately applies that control's vanilla
   value.
+
+  Grip & Slip Model and the sections below it are hidden by default. Use the
+  Show advanced checkbox between the basic and advanced sections to display them.
 
 
 SUPPORTED VEHICLES
@@ -113,8 +115,3 @@ TECHNICAL
   - Uses confirmed post-2.0 TweakDB property names
   - Official vehicle TweakDB IDs come from the installed game's player list
   - Slider UI runs inside CET ImGui; stock values are read from live TweakDB
-
-
-AUTHOR
-
-  indigo-nx
