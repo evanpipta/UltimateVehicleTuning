@@ -3,7 +3,7 @@ by indigo-nx
 CET UI restored locally — no desktop exe required.
 
 In-game CET overlay for tuning vehicle physics in Cyberpunk 2077.
-Pick a vehicle, drag sliders, apply to the game, resummon your ride.
+Pick a vehicle, adjust a control, then resummon or recycle your ride.
 
 
 REQUIREMENTS
@@ -26,7 +26,7 @@ INSTALLATION
     Verification:
       Launch the game, open the CET overlay (default: ~ or F1, depending on your bind).
       You should see a window titled "Vehicle Physics Config // indigo-nx"
-      with a vehicle dropdown, presets, and sliders.
+      with a vehicle dropdown and per-vehicle physics controls.
       If it doesn't appear, make sure VehiclePhysicsConfig/init.lua is inside:
         <game>/bin/x64/plugins/cyber_engine_tweaks/mods/
 
@@ -48,9 +48,9 @@ HOW TO USE
   1. Start the game and open the CET overlay
   2. Find "Vehicle Physics Config // indigo-nx"
   3. Select a vehicle (or click Use current vehicle while driving)
-  4. Choose a preset or adjust individual sliders
-  5. Click APPLY TO GAME (or enable Auto apply)
-  6. Spawned vehicles cache their physics. Either resummon normally, or exit
+  4. Adjust a slider or checkbox. Its absolute value applies and saves
+     automatically when editing finishes.
+  5. Spawned vehicles cache their physics. Either resummon normally, or exit
      the vehicle and click RECYCLE LAST VEHICLE (EXPERIMENTAL). The mod remembers
      the last vehicle occupied during this session, requests its despawn, waits
      briefly, then requests a fresh nearby spawn. It may fail during quests or
@@ -59,40 +59,28 @@ HOW TO USE
   Changed values highlight green. Expand "Apply log" to confirm every
   TweakDB write with [OK] or [MISS].
 
+  The Steering and Speed-Sensitive Steering panels each include a button
+  that copies only that section's exact absolute values to every vehicle.
+  Existing tunes in all other sections are preserved.
+
   Tunes are saved to config.json in this mod folder and restored on the
   next launch. Stock values are captured once to stock.json.
 
 
 PARAMETERS
 
-  35 parameters across eight categories:
-
-  Mass & Dynamics     Total mass, chassis mass, air resistance
-  Engine              Max torque, resistance torque, max RPM
-  Suspension Front    Spring rate, damping, rebound, anti-roll
-  Suspension Rear     Spring rate, damping, rebound, anti-roll
-  Tires               Lateral & longitudinal friction (front/rear independently)
-  Steering            Turn speed +/-, steering assist
-  Speed-Sensitive     Enable scaling, maximum angle, speed thresholds,
-                      mid/high-speed angle and turn-rate multipliers,
-                      input progression and slow-input change speed
-  Braking             Front brake, rear brake, handbrake
+  The per-vehicle editor includes mass and drag; center of mass and three-axis
+  inertia; steering and speed-sensitive steering; slip-angle, slip-ratio, wheel
+  load and contact behavior; front/rear basic and advanced suspension; brakes;
+  engine response and individual gears; drivetrain/brake roles; wheel geometry;
+  rotation/drift limiting; dynamic rear grip; handbrake, traction, acceleration,
+  downforce and in-air helpers; burnout/launch behavior; and bike dynamics.
 
   Speed thresholds are shown in metres per second (10 m/s = 36 km/h).
-  The speed-sensitive steering controls start at each vehicle's exact vanilla
-  values, including its vanilla mid/high-speed steering ratios.
-  All values start at each vehicle's captured stock defaults.
-  Presets apply multipliers to stock values -- always reversible.
-
-
-PRESETS
-
-  Stock       Reset to game defaults
-  Realistic   Heavier, less grip, more braking required
-  Sport       Stiffer, more grip, sharper turn-in
-  Drift       Loose rear, increased steering, handbrake bias
-  Track       Lightweight, stiff, maximum grip, aggressive braking
-  Offroad     Soft suspension, low anti-roll, balanced grip
+  Every slider has a fixed absolute range shared by all vehicles. Values start
+  at each vehicle's captured vanilla defaults. The Reset button beside an
+  individual control restores and immediately applies that control's vanilla
+  value.
 
 
 SUPPORTED VEHICLES (51)
@@ -136,7 +124,7 @@ SUPPORTED VEHICLES (51)
 PROFILES
 
   Save/Load profiles to keep multiple tuning setups.
-  Apply To All copies your current vehicle's tuning ratios across all vehicles.
+  Apply To All copies your current vehicle's exact absolute values.
 
 
 COMPATIBILITY
