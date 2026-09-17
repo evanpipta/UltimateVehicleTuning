@@ -639,17 +639,31 @@ local showAdvanced = false
 local selected = 1
 local edit = {}
 local stock = {}
+local vanillaStock = {}
+local runtimeStock = {}
 local saved = {}
+local diskSaved = {}
 local vehicleCount = 0
 local lastError = ""
 local appliedList = {}
 local statusMessage = "Open this window in the CET overlay to tune vehicles."
+local configStatus = "Loading presets..."
 local tdbReady = false
 local pendingRespawn = nil
 local lastMountedRecordName = nil
+local autoSave = true
+local activeConfigFile = "config.json"
+local activeConfigReadOnly = false
+local presetDirty = false
+local presetFiles = {}
+local saveAsName = "config_new.json"
+local metadata = { version = 1, activeConfig = "config.json", autoSave = true, presetIndex = { "config.json" } }
 
 local STOCK_FILE = "stock.json"
-local CONFIG_FILE = "config.json"
+local RUNTIME_STOCK_FILE = "stock_runtime.json"
+local BASE_CONFIG_FILE = "config_base.json"
+local DEFAULT_CONFIG_FILE = "config.json"
+local METADATA_FILE = "metadata.json"
 
 local LEGACY_KEYS = {
     ["Vehicle.v_sport1_quadra_turbo_r_player"] = { "Vehicle.v_sport1_quadra_turbo_r_v_tech" },
@@ -664,7 +678,8 @@ local LEGACY_KEYS = {
 
 local function migrateLegacyKeys(target)
     for _, veh in ipairs(VEHICLES) do
-        local legacy = LEGACY_KEYS[veh.id] or {}
+        local legacy = {}
+        for _, id in ipairs(LEGACY_KEYS[veh.id] or {}) do table.insert(legacy, id) end
         local bare = veh.id:gsub("_player$", "")
         if bare ~= veh.id then table.insert(legacy, bare) end
         if target[veh.id] == nil then
@@ -719,6 +734,30 @@ local function copyTbl(src)
     return dst
 end
 
+local function copyVehicleMap(src)
+    local dst = {}
+    for id, params in pairs(src or {}) do
+        if type(params) == "table" then dst[id] = copyTbl(params) end
+    end
+    return dst
+end
+
+local function tablesEqual(a, b)
+    if a == b then return true end
+    if type(a) ~= "table" or type(b) ~= "table" then return false end
+    for key, value in pairs(a) do
+        if type(value) == "number" and type(b[key]) == "number" then
+            if math.abs(value - b[key]) > 0.000001 then return false end
+        elseif value ~= b[key] then
+            if type(value) ~= "table" or not tablesEqual(value, b[key]) then return false end
+        end
+    end
+    for key in pairs(b) do
+        if a[key] == nil then return false end
+    end
+    return true
+end
+
 local function asNumber(v)
     if v == nil then return nil end
     if type(v) == "boolean" then return v end
@@ -739,24 +778,156 @@ local function loadJSON(path)
     return nil
 end
 
+local function fileExists(path)
+    local ok, exists = pcall(function()
+        local f = io.open(path, "r")
+        if not f then return false end
+        f:close()
+        return true
+    end)
+    return ok and exists
+end
+
 local function saveJSON(path, data)
-    pcall(function()
+    local ok, err = pcall(function()
         local f = io.open(path, "w")
-        if not f then return end
+        if not f then error("Could not open " .. tostring(path) .. " for writing") end
         f:write(json.encode(data))
         f:close()
     end)
+    return ok, err
 end
 
-local function persistConfig()
-    saveJSON(CONFIG_FILE, {
+local function safeConfigFilename(name)
+    if type(name) ~= "string" then return nil end
+    name = name:match("^%s*(.-)%s*$")
+    if name == "" or name:find("..", 1, true) or
+        name:find("/", 1, true) or name:find("\\", 1, true) then return nil end
+    if not name:lower():match("^config.*%.json$") then return nil end
+    return name
+end
+
+local function countSavedVehicles()
+    local count = 0
+    for vehId, params in pairs(saved) do
+        local edited = stock[vehId] == nil
+        if type(params) == "table" then
+            for key, value in pairs(params) do
+                local vanilla = stock[vehId] and stock[vehId][key] or nil
+                if type(value) == "number" and type(vanilla) == "number" then
+                    if math.abs(value - vanilla) > 0.001 then edited = true break end
+                elseif value ~= vanilla then
+                    edited = true
+                    break
+                end
+            end
+        end
+        if edited then count = count + 1 end
+    end
+    vehicleCount = count
+    return count
+end
+
+local function activeConfigDirty()
+    return presetDirty
+end
+
+local function persistMetadata()
+    metadata.version = 1
+    metadata.activeConfig = activeConfigFile
+    metadata.autoSave = autoSave
+    local index, seen = {}, {}
+    for _, preset in ipairs(presetFiles) do
+        local file = safeConfigFilename(preset.file)
+        if file and not seen[file:lower()] then
+            table.insert(index, file)
+            seen[file:lower()] = true
+        end
+    end
+    metadata.presetIndex = index
+    return saveJSON(METADATA_FILE, metadata)
+end
+
+local function persistActiveConfig()
+    if activeConfigReadOnly then
+        return false, "The selected baseline is read-only. Use Save As to create an editable preset."
+    end
+    local ok, err = saveJSON(activeConfigFile, {
         selectedId = VEHICLES[selected] and VEHICLES[selected].id or nil,
         vehicles = saved,
     })
+    if ok then
+        diskSaved = copyVehicleMap(saved)
+        presetDirty = false
+        countSavedVehicles()
+        configStatus = "Saved " .. activeConfigFile
+        persistMetadata()
+        return true
+    end
+    return false, tostring(err or "Could not save preset")
 end
 
-local function persistStock()
-    saveJSON(STOCK_FILE, stock)
+local function persistRuntimeStock()
+    return saveJSON(RUNTIME_STOCK_FILE, runtimeStock)
+end
+
+local function validPresetDocument(data)
+    return type(data) == "table" and type(data.vehicles) == "table"
+end
+
+local function refreshPresetFiles()
+    local names, seen = {}, {}
+    local function addName(name)
+        name = safeConfigFilename(name)
+        if not name then return end
+        local key = name:lower()
+        if not seen[key] then
+            seen[key] = true
+            table.insert(names, name)
+        end
+    end
+
+    addName(DEFAULT_CONFIG_FILE)
+    addName(BASE_CONFIG_FILE)
+    for _, name in ipairs(metadata.presetIndex or {}) do addName(name) end
+
+    local ok, entries = pcall(function() return dir(".") end)
+    if ok and type(entries) == "table" then
+        for _, entry in ipairs(entries) do
+            if type(entry) == "table" and (entry.type == nil or entry.type == "file") then
+                addName(entry.name)
+            elseif type(entry) == "string" then
+                addName(entry)
+            end
+        end
+    end
+
+    table.sort(names, function(a, b)
+        if a:lower() == DEFAULT_CONFIG_FILE then return true end
+        if b:lower() == DEFAULT_CONFIG_FILE then return false end
+        if a:lower() == BASE_CONFIG_FILE then return false end
+        if b:lower() == BASE_CONFIG_FILE then return true end
+        return a:lower() < b:lower()
+    end)
+
+    presetFiles = {}
+    for _, name in ipairs(names) do
+        local data = loadJSON(name)
+        if validPresetDocument(data) then
+            table.insert(presetFiles, {
+                file = name,
+                label = name,
+                readOnly = name:lower() == BASE_CONFIG_FILE,
+                vanilla = false,
+            })
+        end
+    end
+    table.insert(presetFiles, {
+        file = STOCK_FILE,
+        label = "Vanilla (stock.json)",
+        readOnly = true,
+        vanilla = true,
+    })
 end
 
 local function getRecord(vehId)
@@ -1226,43 +1397,91 @@ local function currentStock()
     return stock[veh.id] or {}
 end
 
+local function mergedPresetParams(vehId, presetVehicles)
+    local params = copyTbl(stock[vehId] or {})
+    for key, value in pairs((presetVehicles or saved)[vehId] or {}) do
+        params[key] = value
+    end
+    return params
+end
+
+local function ensureVehicleInRoster(vehId)
+    if type(vehId) ~= "string" or vehId == "" then return nil end
+    for index, veh in ipairs(VEHICLES) do
+        for _, id in ipairs(candidateIds(veh)) do
+            if id:lower() == vehId:lower() then return index, veh end
+        end
+    end
+    local veh = {
+        id = vehId,
+        name = friendlyVehicleName(vehId),
+        class = vehId:lower():find("sportbike", 1, true) and "Bike" or "Additional Player Vehicles",
+    }
+    table.insert(VEHICLES, veh)
+    return #VEHICLES, veh
+end
+
+local function addPresetVehiclesToRoster(presetVehicles)
+    for vehId in pairs(presetVehicles or {}) do ensureVehicleInRoster(vehId) end
+end
+
+local function captureVehicleStock(veh)
+    if not veh then return nil end
+    local _, liveParams = firstReadableId(veh)
+    if not liveParams then return nil end
+
+    local changed = false
+    stock[veh.id] = stock[veh.id] or {}
+    runtimeStock[veh.id] = runtimeStock[veh.id] or {}
+    for key, value in pairs(liveParams) do
+        if stock[veh.id][key] == nil then
+            stock[veh.id][key] = value
+            runtimeStock[veh.id][key] = value
+            changed = true
+        end
+    end
+    if changed then persistRuntimeStock() end
+    return stock[veh.id]
+end
+
 local function selectVehicle(index)
     if index < 1 or index > #VEHICLES then return end
     selected = index
     local veh = VEHICLES[selected]
-    if saved[veh.id] then
-        local params = copyTbl(stock[veh.id] or {})
-        for key, value in pairs(saved[veh.id]) do
-            params[key] = value
-        end
-        loadEditorFrom(params)
-    elseif stock[veh.id] then
-        loadEditorFrom(stock[veh.id])
+    if not stock[veh.id] then captureVehicleStock(veh) end
+    if stock[veh.id] then
+        loadEditorFrom(mergedPresetParams(veh.id))
     else
-        local _, params = firstReadableId(veh)
-        if params then
-            stock[veh.id] = copyTbl(params)
-            persistStock()
-            loadEditorFrom(params)
-        else
-            edit = {}
-            lastError = "Could not read TweakDB record for " .. veh.name
-        end
+        edit = {}
+        lastError = "Could not read TweakDB record for " .. veh.name
     end
 end
 
 local function applyCurrent(reason)
     local veh = currentVeh()
     if not veh then return end
+    if activeConfigReadOnly then
+        configStatus = "Read-only baseline. Use Save As before editing."
+        return
+    end
     appliedList = {}
     lastError = ""
     local ok, err = applyToVariants(veh, edit)
     if ok then
         saved[veh.id] = copyTbl(edit)
-        vehicleCount = 0
-        for _ in pairs(saved) do vehicleCount = vehicleCount + 1 end
-        persistConfig()
-        statusMessage = (reason or "Applied") .. " " .. veh.name .. ". Resummon the vehicle to feel the change."
+        presetDirty = not tablesEqual(saved, diskSaved)
+        countSavedVehicles()
+        if autoSave then
+            local savedOk, saveErr = persistActiveConfig()
+            if not savedOk then
+                lastError = tostring(saveErr)
+                configStatus = "Auto-save failed: " .. lastError
+            end
+        else
+            configStatus = "Unsaved changes in " .. activeConfigFile
+        end
+        statusMessage = (reason or "Applied") .. " " .. veh.name ..
+            ". Exit and re-enter the vehicle to load changed physics."
         print("[VPC] Applied " .. veh.name)
     else
         lastError = tostring(err or "Apply failed")
@@ -1272,6 +1491,10 @@ local function applyCurrent(reason)
 end
 
 local function applyGroupToAll(groupName)
+    if activeConfigReadOnly then
+        configStatus = "Read-only baseline. Use Save As before editing."
+        return
+    end
     local base = currentStock()
     if not next(base) then
         lastError = "No stock values captured yet for the selected vehicle."
@@ -1316,50 +1539,176 @@ local function applyGroupToAll(groupName)
         end
     end
 
-    vehicleCount = 0
-    for _ in pairs(saved) do vehicleCount = vehicleCount + 1 end
-    persistConfig()
-    statusMessage = "Applied " .. groupName .. " absolute values to " .. count .. " vehicles. Resummon to feel changes."
+    presetDirty = not tablesEqual(saved, diskSaved)
+    countSavedVehicles()
+    if autoSave then
+        local ok, err = persistActiveConfig()
+        if not ok then
+            lastError = tostring(err)
+            configStatus = "Auto-save failed: " .. lastError
+        end
+    else
+        configStatus = "Unsaved changes in " .. activeConfigFile
+    end
+    statusMessage = "Applied " .. groupName .. " values to " .. count ..
+        " vehicles. Exit and re-enter a vehicle to load changed physics."
 end
 
 local function captureMissingStock()
+    local changed = false
     for _, veh in ipairs(VEHICLES) do
         local _, liveParams = firstReadableId(veh)
         if liveParams then
             if not stock[veh.id] then stock[veh.id] = {} end
-            -- Preserve previously captured vanilla values, but backfill fields
-            -- introduced by newer versions of this UI.
+            if not runtimeStock[veh.id] then runtimeStock[veh.id] = {} end
             for key, value in pairs(liveParams) do
                 if stock[veh.id][key] == nil then
                     stock[veh.id][key] = value
+                    runtimeStock[veh.id][key] = value
+                    changed = true
                 end
             end
         end
     end
-    persistStock()
+    if changed then persistRuntimeStock() end
 end
 
-local function applySaved()
+local function applyPresetState()
     appliedList = {}
     local count = 0
     local errors = 0
     for _, veh in ipairs(VEHICLES) do
-        local params = saved[veh.id]
-        if params then
+        local params = mergedPresetParams(veh.id)
+        if next(params) then
             local ok, err = applyToVariants(veh, params)
             if ok then
-                count = count + 1
+                if saved[veh.id] then count = count + 1 end
             else
                 errors = errors + 1
                 lastError = tostring(err)
             end
         end
     end
-    vehicleCount = count
-    if count > 0 then
-        statusMessage = "Restored " .. count .. " saved vehicle tune(s)."
-        print("[VPC] Restored " .. count .. " vehicles, " .. errors .. " errors")
+    countSavedVehicles()
+    statusMessage = "Loaded " .. activeConfigFile .. " (" .. vehicleCount .. " edited vehicles)."
+    print("[VPC] Applied preset " .. activeConfigFile .. ": " .. count ..
+        " configured vehicles, " .. errors .. " errors")
+end
+
+local function findPreset(file)
+    for _, preset in ipairs(presetFiles) do
+        if preset.file:lower() == tostring(file):lower() then return preset end
     end
+    return nil
+end
+
+local function selectedIndexForId(vehId)
+    if not vehId then return selected end
+    for index, veh in ipairs(VEHICLES) do
+        if veh.id == vehId then return index end
+    end
+    return selected
+end
+
+local function loadPreset(file, discardDirty)
+    if activeConfigDirty() and not discardDirty then
+        if autoSave and not activeConfigReadOnly then
+            local ok, err = persistActiveConfig()
+            if not ok then
+                configStatus = "Could not save before switching: " .. tostring(err)
+                return false
+            end
+        else
+            configStatus = "Unsaved changes: Save or Discard before switching presets."
+            return false
+        end
+    end
+
+    local preset = findPreset(file)
+    if not preset then
+        refreshPresetFiles()
+        preset = findPreset(file)
+    end
+    if not preset then
+        configStatus = "Preset not found or invalid: " .. tostring(file)
+        return false
+    end
+
+    local document
+    if preset.vanilla then
+        document = { selectedId = currentVeh() and currentVeh().id or nil, vehicles = {} }
+    else
+        document = loadJSON(preset.file)
+        if not validPresetDocument(document) then
+            configStatus = "Invalid preset: " .. preset.file
+            return false
+        end
+    end
+
+    local loadedVehicles = copyVehicleMap(document and document.vehicles or {})
+    migrateLegacyKeys(loadedVehicles)
+    migrateParamKeys(loadedVehicles)
+    addPresetVehiclesToRoster(loadedVehicles)
+    captureMissingStock()
+
+    activeConfigFile = preset.file
+    activeConfigReadOnly = preset.readOnly
+    saved = loadedVehicles
+    diskSaved = copyVehicleMap(loadedVehicles)
+    presetDirty = false
+    selected = selectedIndexForId(document and document.selectedId or nil)
+    countSavedVehicles()
+    applyPresetState()
+    selectVehicle(selected)
+    configStatus = "Loaded " .. preset.label .. (preset.readOnly and " (read-only)" or "")
+    persistMetadata()
+    return true
+end
+
+local function discardActiveChanges()
+    return loadPreset(activeConfigFile, true)
+end
+
+local function normalizedSaveAsFilename(raw)
+    if type(raw) ~= "string" then return nil end
+    local name = raw:match("^%s*(.-)%s*$")
+    if name == "" or name:find("..", 1, true) or
+        name:find("/", 1, true) or name:find("\\", 1, true) then return nil end
+    if not name:lower():match("%.json$") then name = name .. ".json" end
+    if not name:lower():match("^config") then name = "config_" .. name end
+    return safeConfigFilename(name)
+end
+
+local function saveAsPreset(rawName)
+    local filename = normalizedSaveAsFilename(rawName)
+    if not filename then
+        configStatus = "Use a simple config name without folders or '..'."
+        return false
+    end
+    if filename:lower() == BASE_CONFIG_FILE or filename:lower() == STOCK_FILE then
+        configStatus = "That filename is reserved for a read-only baseline."
+        return false
+    end
+    if fileExists(filename) then
+        configStatus = filename .. " already exists. Select it and use Save."
+        return false
+    end
+
+    local previousFile = activeConfigFile
+    local previousReadOnly = activeConfigReadOnly
+    activeConfigFile = filename
+    activeConfigReadOnly = false
+    local ok, err = persistActiveConfig()
+    if not ok then
+        activeConfigFile = previousFile
+        activeConfigReadOnly = previousReadOnly
+        configStatus = "Save As failed: " .. tostring(err)
+        return false
+    end
+    refreshPresetFiles()
+    persistMetadata()
+    configStatus = "Created and selected " .. filename
+    return true
 end
 
 local function normalizeRecordName(raw)
@@ -1485,7 +1834,6 @@ local function selectMounted(silent)
 
     local function selectMatch(index, veh)
         selectVehicle(index)
-        persistConfig()
         statusMessage = "Selected " .. veh.name .. " from your current vehicle."
         return true
     end
@@ -1520,6 +1868,7 @@ local function selectMounted(silent)
     local _, params = firstReadableId(mountedVehicle)
     if params and next(params) then
         table.insert(VEHICLES, mountedVehicle)
+        captureVehicleStock(mountedVehicle)
         return selectMatch(#VEHICLES, mountedVehicle)
     end
 
@@ -1540,6 +1889,22 @@ local function isChanged(key)
         return math.abs(s - e) > 0.001
     end
     return s ~= e
+end
+
+local function isUnsaved(key)
+    local veh = currentVeh()
+    if not veh then return false end
+    local diskValue = nil
+    if diskSaved[veh.id] and diskSaved[veh.id][key] ~= nil then
+        diskValue = diskSaved[veh.id][key]
+    elseif stock[veh.id] then
+        diskValue = stock[veh.id][key]
+    end
+    local value = edit[key]
+    if type(value) == "number" and type(diskValue) == "number" then
+        return math.abs(value - diskValue) > 0.001
+    end
+    return value ~= diskValue
 end
 
 local function resetParam(key)
@@ -1565,6 +1930,7 @@ local function drawGroup(groupName)
     local textW = ImGui.CalcTextSize("Reset")
     local resetW = textW + padX * 2
     local sliderW = math.max(40, width * 0.5 - gap - resetW)
+    if activeConfigReadOnly then ImGui.BeginDisabled() end
 
     for _, def in ipairs(PARAMS) do
         if def.group == groupName then
@@ -1572,8 +1938,12 @@ local function drawGroup(groupName)
                 ImGui.TextDisabled(def.label .. "  (not on this vehicle)")
             else
                 local changed = isChanged(def.key)
-                local label = (changed and "* " or "") .. def.label
-                if changed then
+                local unsaved = isUnsaved(def.key)
+                local label = (unsaved and "! " or "") .. (changed and "* " or "") .. def.label
+                if unsaved then
+                    ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.67, 0.15, 1.0)
+                    ImGui.PushStyleColor(ImGuiCol.SliderGrab, 1.0, 0.55, 0.10, 1.0)
+                elseif changed then
                     ImGui.PushStyleColor(ImGuiCol.Text, 0.25, 1.0, 0.55, 1.0)
                     ImGui.PushStyleColor(ImGuiCol.SliderGrab, 0.20, 0.90, 0.45, 1.0)
                 end
@@ -1597,7 +1967,7 @@ local function drawGroup(groupName)
                 if ImGui.IsItemDeactivatedAfterEdit() then
                     applyCurrent("Auto-applied")
                 end
-                if changed then ImGui.PopStyleColor(2) end
+                if unsaved or changed then ImGui.PopStyleColor(2) end
 
                 ImGui.SameLine(labelW + sliderW + gap)
                 local canReset = stockVals[def.key] ~= nil
@@ -1624,6 +1994,7 @@ local function drawGroup(groupName)
             ImGui.SetTooltip("Copy this section's exact absolute values; other tuned sections are preserved.")
         end
     end
+    if activeConfigReadOnly then ImGui.EndDisabled() end
 end
 
 local function pushWindowStyle()
@@ -1648,6 +2019,108 @@ local function popWindowStyle()
     ImGui.PopStyleColor(12)
 end
 
+local function drawConfigPanel()
+    ImGui.TextDisabled("CONFIG")
+    ImGui.SetNextItemWidth(ImGui.GetWindowContentRegionWidth())
+    local activePreset = findPreset(activeConfigFile)
+    local presetLabel = activePreset and activePreset.label or activeConfigFile
+    if activeConfigReadOnly then presetLabel = presetLabel .. " [READ ONLY]" end
+    if ImGui.BeginCombo("##active_config", presetLabel, ImGuiComboFlags.HeightLargest) then
+        for _, preset in ipairs(presetFiles) do
+            local label = preset.label .. (preset.readOnly and " [READ ONLY]" or "")
+            if ImGui.Selectable(label, preset.file:lower() == activeConfigFile:lower()) then
+                loadPreset(preset.file, false)
+            end
+        end
+        ImGui.EndCombo()
+    end
+
+    if activeConfigReadOnly then ImGui.BeginDisabled() end
+    if ImGui.Button("Save", 100, 0) then
+        local ok, err = persistActiveConfig()
+        if not ok then configStatus = tostring(err) end
+    end
+    if activeConfigReadOnly then ImGui.EndDisabled() end
+    ImGui.SameLine()
+    local wasDirty = activeConfigDirty()
+    if not wasDirty then ImGui.BeginDisabled() end
+    if ImGui.Button("Discard", 100, 0) then discardActiveChanges() end
+    if not wasDirty then ImGui.EndDisabled() end
+    ImGui.SameLine()
+    local autoValue, autoChanged = ImGui.Checkbox("Auto-save", autoSave)
+    if autoChanged then
+        autoSave = autoValue
+        if autoSave and activeConfigDirty() and not activeConfigReadOnly then
+            local ok, err = persistActiveConfig()
+            if not ok then configStatus = tostring(err) end
+        else
+            persistMetadata()
+            configStatus = autoSave and "Auto-save enabled" or "Auto-save disabled"
+        end
+    end
+
+    ImGui.SetNextItemWidth(ImGui.GetWindowContentRegionWidth() - 115)
+    saveAsName = ImGui.InputText("##save_as_name", saveAsName, 96)
+    ImGui.SameLine()
+    if ImGui.Button("Save As", 105, 0) then saveAsPreset(saveAsName) end
+
+    if activeConfigReadOnly then
+        ImGui.PushStyleColor(ImGuiCol.Text, 0.55, 0.75, 1.0, 1.0)
+        ImGui.Text("READ ONLY: use Save As to create an editable preset.")
+        ImGui.PopStyleColor()
+    elseif activeConfigDirty() then
+        ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.67, 0.15, 1.0)
+        ImGui.Text("UNSAVED CHANGES")
+        ImGui.PopStyleColor()
+    else
+        ImGui.PushStyleColor(ImGuiCol.Text, 0.25, 1.0, 0.55, 1.0)
+        ImGui.Text("SAVED")
+        ImGui.PopStyleColor()
+    end
+    ImGui.Text("Vehicles edited in this preset: " .. tostring(vehicleCount))
+    ImGui.TextWrapped(configStatus)
+    ImGui.TextDisabled("* green = differs from vanilla    ! amber = not saved to this preset")
+end
+
+local function drawVehiclePanel()
+    local veh = currentVeh()
+    local preview = veh and (veh.name .. " [" .. veh.class .. "]") or "Select vehicle"
+
+    ImGui.TextDisabled("VEHICLE TO EDIT")
+    ImGui.SetNextItemWidth(ImGui.GetWindowContentRegionWidth())
+    if ImGui.BeginCombo("##vehicle", preview, ImGuiComboFlags.HeightLargest) then
+        local lastClass = nil
+        for i, v in ipairs(VEHICLES) do
+            if v.class ~= lastClass then
+                ImGui.Separator()
+                ImGui.TextDisabled(v.class)
+                lastClass = v.class
+            end
+            local label = v.name .. " [" .. v.class .. "]"
+            if ImGui.Selectable(label, i == selected) then selectVehicle(i) end
+        end
+        ImGui.EndCombo()
+    end
+
+    if ImGui.Button("Use current vehicle", 180, 0) then selectMounted() end
+    ImGui.SameLine()
+    if pendingRespawn then ImGui.BeginDisabled() end
+    if ImGui.Button("Recycle last vehicle (exit first)", ImGui.GetContentRegionAvail(), 0) then
+        recycleLastVehicle()
+    end
+    if pendingRespawn then ImGui.EndDisabled() end
+
+    ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.78, 0.20, 1.0)
+    ImGui.TextWrapped("Exit and get back into the vehicle to load changed physics. Recycle is an optional shortcut after exiting.")
+    ImGui.PopStyleColor()
+    if veh and saved[veh.id] then
+        ImGui.Text("Preset contains values for " .. veh.name .. ".")
+    elseif veh then
+        ImGui.Text("This vehicle currently uses the selected baseline.")
+    end
+    ImGui.TextWrapped(statusMessage)
+end
+
 local function drawUI()
     ImGui.SetNextWindowSize(720, 820, ImGuiCond.FirstUseEver)
     pushWindowStyle()
@@ -1656,68 +2129,10 @@ local function drawUI()
         if not tdbReady then
             ImGui.TextWrapped("Waiting for TweakDB... reload CET mods after the session has started.")
         else
-            local veh = currentVeh()
-            local preview = veh and (veh.name .. " [" .. veh.class .. "]") or "Select vehicle"
-
-            ImGui.Text("VEHICLE")
-            ImGui.SameLine()
-            ImGui.SetNextItemWidth(ImGui.GetWindowContentRegionWidth() - 80)
-            if ImGui.BeginCombo("##vehicle", preview, ImGuiComboFlags.HeightLargest) then
-                local lastClass = nil
-                for i, v in ipairs(VEHICLES) do
-                    if v.class ~= lastClass then
-                        ImGui.Separator()
-                        ImGui.TextDisabled(v.class)
-                        lastClass = v.class
-                    end
-                    local label = v.name .. " [" .. v.class .. "]"
-                    if ImGui.Selectable(label, i == selected) then
-                        selectVehicle(i)
-                        persistConfig()
-                    end
-                end
-                ImGui.EndCombo()
-            end
-
-            if ImGui.Button("Use current vehicle") then
-                selectMounted()
-            end
-            ImGui.SameLine()
-            if ImGui.Button("Reload live values") then
-                local id, params = firstReadableId(veh)
-                if params then
-                    loadEditorFrom(params)
-                    statusMessage = "Loaded live TweakDB values for " .. veh.name
-                else
-                    lastError = "Could not read live values for " .. veh.name
-                end
-            end
             ImGui.Separator()
-            local availX = ImGui.GetContentRegionAvail()
-            if pendingRespawn then ImGui.BeginDisabled() end
-            ImGui.PushStyleColor(ImGuiCol.Button, 0.34, 0.16, 0.06, 1.0)
-            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0.52, 0.24, 0.08, 1.0)
-            ImGui.PushStyleColor(ImGuiCol.ButtonActive, 0.25, 0.10, 0.04, 1.0)
-            if ImGui.Button("RECYCLE LAST VEHICLE (EXIT FIRST) [EXPERIMENTAL]", availX, 28) then
-                recycleLastVehicle()
-            end
-            ImGui.PopStyleColor(3)
-            if pendingRespawn then ImGui.EndDisabled() end
-
-            ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.78, 0.20, 1.0)
-            ImGui.TextWrapped("Slider changes apply and save automatically when released. Exit the vehicle, then recycle to load changed physics.")
-            ImGui.PopStyleColor()
-
-            if saved[veh.id] then
-                ImGui.PushStyleColor(ImGuiCol.Text, 0.0, 1.0, 0.53, 1.0)
-                ImGui.Text("STATUS: SAVED TUNE FOR THIS VEHICLE")
-            else
-                ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.67, 0.0, 1.0)
-                ImGui.Text("STATUS: STOCK / NOT YET APPLIED")
-            end
-            ImGui.PopStyleColor()
-            ImGui.Text("Saved vehicles: " .. tostring(vehicleCount))
-            ImGui.TextWrapped(statusMessage)
+            drawConfigPanel()
+            ImGui.Separator()
+            drawVehiclePanel()
 
             if lastError ~= "" then
                 ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.25, 0.15, 1.0)
@@ -1769,29 +2184,60 @@ end
 registerForEvent("onInit", function()
     discoverOfficialVehicles()
 
-    local stockData = loadJSON(STOCK_FILE)
-    if type(stockData) == "table" then stock = stockData end
-
-    local cfg = loadJSON(CONFIG_FILE)
-    if type(cfg) == "table" then
-        if type(cfg.vehicles) == "table" then saved = cfg.vehicles end
-        if cfg.selectedId then
-            for i, veh in ipairs(VEHICLES) do
-                if veh.id == cfg.selectedId then
-                    selected = i
-                    break
-                end
-            end
+    vanillaStock = loadJSON(STOCK_FILE) or {}
+    runtimeStock = loadJSON(RUNTIME_STOCK_FILE) or {}
+    migrateLegacyKeys(vanillaStock)
+    migrateLegacyKeys(runtimeStock)
+    migrateParamKeys(vanillaStock)
+    migrateParamKeys(runtimeStock)
+    stock = copyVehicleMap(vanillaStock)
+    for vehId, params in pairs(runtimeStock) do
+        stock[vehId] = stock[vehId] or {}
+        for key, value in pairs(params) do
+            if stock[vehId][key] == nil then stock[vehId][key] = value end
         end
     end
-    migrateLegacyKeys(stock)
-    migrateLegacyKeys(saved)
-    migrateParamKeys(stock)
-    migrateParamKeys(saved)
+    addPresetVehiclesToRoster(runtimeStock)
 
-    captureMissingStock()
-    applySaved()
-    selectVehicle(selected)
+    local loadedMetadata = loadJSON(METADATA_FILE)
+    if type(loadedMetadata) == "table" then
+        metadata = loadedMetadata
+        if type(metadata.autoSave) == "boolean" then autoSave = metadata.autoSave end
+        if type(metadata.activeConfig) == "string" then
+            activeConfigFile = metadata.activeConfig
+        end
+        if type(metadata.presetIndex) ~= "table" then metadata.presetIndex = {} end
+    end
+
+    if not fileExists(DEFAULT_CONFIG_FILE) then
+        saveJSON(DEFAULT_CONFIG_FILE, {
+            selectedId = VEHICLES[selected] and VEHICLES[selected].id or nil,
+            vehicles = {},
+        })
+    end
+
+    refreshPresetFiles()
+    if not findPreset(activeConfigFile) then
+        activeConfigFile = DEFAULT_CONFIG_FILE
+        if not findPreset(activeConfigFile) then
+            activeConfigFile = BASE_CONFIG_FILE
+        end
+        if not findPreset(activeConfigFile) then
+            activeConfigFile = STOCK_FILE
+        end
+    end
+
+    if not loadPreset(activeConfigFile, true) then
+        saved = {}
+        diskSaved = {}
+        activeConfigFile = STOCK_FILE
+        activeConfigReadOnly = true
+        captureMissingStock()
+        applyPresetState()
+        selectVehicle(selected)
+        configStatus = "Loaded vanilla fallback (read-only)"
+    end
+
     tdbReady = true
     print("[UltimateVehicleTuning] CET UI ready. Open the overlay to tune vehicles.")
 end)

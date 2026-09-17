@@ -46,24 +46,23 @@ HOW TO USE
 
   1. Start the game and open the CET overlay
   2. Find "Ultimate Vehicle Tuning"
-  3. Select a vehicle (or click Use current vehicle while driving)
-  4. Adjust a slider or checkbox. Its absolute value applies and saves
-     automatically when editing finishes.
-  5. Spawned vehicles cache their physics. Either resummon normally, or exit
-     the vehicle and click RECYCLE LAST VEHICLE (EXPERIMENTAL). The mod remembers
-     the last vehicle occupied during this session, requests its despawn, waits
-     briefly, then requests a fresh nearby spawn. It may fail during quests or
-     in restricted areas.
+  3. Select an editable config, or use Save As to clone a read-only baseline.
+  4. Select a vehicle (or click Use current vehicle while driving).
+  5. Adjust a slider or checkbox. Its value applies when editing finishes.
+     With Auto-save enabled it is also written to the active config immediately.
+  6. Exit and get back into the vehicle to load changed physics. Recycle Last
+     Vehicle is an optional shortcut after exiting and may fail during quests
+     or in restricted areas.
 
-  Changed values highlight green. Expand "Apply log" to confirm every
-  TweakDB write with [OK] or [MISS].
+  Values that differ from vanilla are marked * and highlighted green. Unsaved
+  values are additionally marked ! and highlighted amber. Expand "Apply log"
+  to confirm TweakDB writes with [OK] or [MISS].
 
   The Speed-Sensitive Steering panel includes a button that copies that
   section's exact absolute values to every vehicle.
   Existing tunes in all other sections are preserved.
 
-  Tunes are saved to config.json in this mod folder and restored on the
-  next launch. Stock values are captured once to stock.json.
+  The last selected config and Auto-save setting are remembered in metadata.json.
 
 
 PARAMETERS
@@ -97,7 +96,20 @@ SUPPORTED VEHICLES
 
 PROFILES
 
-  Save/Load profiles to keep multiple tuning setups.
+  The config dropdown discovers valid config*.json files in this mod folder.
+  config.json is the default editable preset. Use Save As to create another
+  editable preset without changing the source preset.
+
+  Vanilla (stock.json) and config_base.json are read-only starting points.
+  Select either one to preview/apply it, then use Save As before editing.
+
+  With Auto-save disabled, changes still apply live but remain in memory until
+  Save is clicked. Preset switching is blocked while changes are unsaved; use
+  Save or Discard first.
+
+  stock.json is never modified. Values for newly added official or mod vehicles
+  are captured into stock_runtime.json and used as their read-only reset
+  baseline. Mounted custom vehicles are added to the selector automatically.
 
 
 COMPATIBILITY
@@ -114,4 +126,5 @@ TECHNICAL
   - Single Lua file, no external dependencies beyond CET
   - Uses confirmed post-2.0 TweakDB property names
   - Official vehicle TweakDB IDs come from the installed game's player list
+  - Presets and metadata stay inside this mod's base directory
   - Slider UI runs inside CET ImGui; stock values are read from live TweakDB
