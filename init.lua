@@ -2027,8 +2027,10 @@ local function drawConfigPanel()
     if activeConfigReadOnly then presetLabel = presetLabel .. " [READ ONLY]" end
     if ImGui.BeginCombo("##active_config", presetLabel, ImGuiComboFlags.HeightLargest) then
         for _, preset in ipairs(presetFiles) do
-            local label = preset.label .. (preset.readOnly and " [READ ONLY]" or "")
-            if ImGui.Selectable(label, preset.file:lower() == activeConfigFile:lower()) then
+            local isActive = preset.file:lower() == activeConfigFile:lower()
+            local label = (isActive and "> " or "") .. preset.label ..
+                (preset.readOnly and " [READ ONLY]" or "")
+            if ImGui.Selectable(label, false) and not isActive then
                 loadPreset(preset.file, false)
             end
         end
@@ -2096,8 +2098,9 @@ local function drawVehiclePanel()
                 ImGui.TextDisabled(v.class)
                 lastClass = v.class
             end
-            local label = v.name .. " [" .. v.class .. "]"
-            if ImGui.Selectable(label, i == selected) then selectVehicle(i) end
+            local isActive = i == selected
+            local label = (isActive and "> " or "") .. v.name .. " [" .. v.class .. "]"
+            if ImGui.Selectable(label, false) and not isActive then selectVehicle(i) end
         end
         ImGui.EndCombo()
     end
