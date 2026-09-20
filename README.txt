@@ -82,7 +82,7 @@ PARAMETERS
   individual control restores and immediately applies that control's vanilla
   value.
 
-  Grip & Slip Model and the sections below it are hidden by default. Use the
+  Wheel Contact Model and the sections below it are hidden by default. Use the
   Show advanced checkbox between the basic and advanced sections to display them.
 
 
