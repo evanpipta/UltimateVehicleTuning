@@ -1987,9 +1987,9 @@ local function drawGroup(groupName)
 
     if groupName == "SPEED-SENSITIVE STEERING" then
         ImGui.Spacing()
-        if ImGui.Button("APPLY THIS SECTION TO ALL VEHICLES###apply_all_" .. groupName, width, 28) then
-            applyGroupToAll(groupName)
-        end
+        -- if ImGui.Button("APPLY THIS SECTION TO ALL VEHICLES###apply_all_" .. groupName, width, 28) then
+        --     applyGroupToAll(groupName)
+        -- end
         if ImGui.IsItemHovered() then
             ImGui.SetTooltip("Copy this section's exact absolute values; other tuned sections are preserved.")
         end
