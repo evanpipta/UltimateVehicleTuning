@@ -29,12 +29,6 @@ INSTALLATION
       If it doesn't appear, make sure VehiclePhysicsConfig/init.lua is inside:
         <game>/bin/x64/plugins/cyber_engine_tweaks/mods/
 
-  No desktop configurator:
-
-    The original Nexus package expected a separate Windows .exe to write slider
-    values into init.lua. That tool is not required. The CET overlay now contains
-    the full slider UI and reads live TweakDB values from the game.
-
 
 UNINSTALL
 
