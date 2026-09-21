@@ -2085,6 +2085,22 @@ end
 
 local function drawTunePanel()
     ImGui.TextDisabled("TUNE")
+
+    ImGui.SameLine()
+    if activeTuneReadOnly then
+        ImGui.PushStyleColor(ImGuiCol.Text, 0.55, 0.75, 1.0, 1.0)
+        ImGui.Text("[READ ONLY - Use Save As New to make changes]")
+        ImGui.PopStyleColor()
+    elseif activeTuneDirty() then
+        ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.67, 0.15, 1.0)
+        ImGui.Text("[UNSAVED CHANGES]")
+        ImGui.PopStyleColor()
+    else
+        ImGui.PushStyleColor(ImGuiCol.Text, 0.25, 1.0, 0.55, 1.0)
+        ImGui.Text("[SAVED]")
+        ImGui.PopStyleColor()
+    end
+
     ImGui.SetNextItemWidth(ImGui.GetWindowContentRegionWidth())
     local activeTune = findTune(activeTuneId)
     local tuneLabel = activeTune and activeTune.label or activeTuneId
@@ -2101,6 +2117,10 @@ local function drawTunePanel()
         ImGui.EndCombo()
     end
 
+    if ImGui.Button("Save As New", 150, 0) then
+        ImGui.OpenPopup("Save tune as###save_as_confirmation")
+    end
+    ImGui.SameLine()
     if activeTuneReadOnly then ImGui.BeginDisabled() end
     if ImGui.Button("Save", 100, 0) then
         local ok, err = persistActiveTune()
@@ -2110,10 +2130,31 @@ local function drawTunePanel()
     ImGui.SameLine()
     local wasDirty = activeTuneDirty()
     if not wasDirty then ImGui.BeginDisabled() end
-    if ImGui.Button("Discard", 100, 0) then discardActiveChanges() end
+    if wasDirty then
+        ImGui.PushStyleColor(ImGuiCol.Button, 0.62, 0.38, 0.06, 1.0)
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0.82, 0.52, 0.10, 1.0)
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, 0.48, 0.28, 0.04, 1.0)
+    end
+    if ImGui.Button("Discard Changes", 160, 0) then discardActiveChanges() end
+    if wasDirty then ImGui.PopStyleColor(3) end
     if not wasDirty then ImGui.EndDisabled() end
+    if activeTuneReadOnly then ImGui.BeginDisabled() end
     ImGui.SameLine()
+    if not activeTuneReadOnly then
+        ImGui.PushStyleColor(ImGuiCol.Button, 0.62, 0.10, 0.10, 1.0)
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0.82, 0.16, 0.16, 1.0)
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, 0.48, 0.06, 0.06, 1.0)
+    end
+    if ImGui.Button("Delete", 100, 0) then
+        pendingDeleteTuneId = activeTuneId
+        ImGui.OpenPopup("Delete saved tune?###delete_tune_confirmation")
+    end
+    if not activeTuneReadOnly then ImGui.PopStyleColor(3) end
+    if activeTuneReadOnly then ImGui.EndDisabled() end
+    ImGui.SameLine()
+    if activeTuneReadOnly then ImGui.BeginDisabled() end
     local autoValue, autoChanged = ImGui.Checkbox("Auto-save", autoSave)
+    if activeTuneReadOnly then ImGui.EndDisabled() end
     if autoChanged then
         autoSave = autoValue
         if autoSave and activeTuneDirty() and not activeTuneReadOnly then
@@ -2125,54 +2166,72 @@ local function drawTunePanel()
         end
     end
 
-    ImGui.SetNextItemWidth(ImGui.GetWindowContentRegionWidth() - 115)
-    saveAsName = ImGui.InputText("##save_as_name", saveAsName, 96)
-    ImGui.SameLine()
-    if ImGui.Button("Save As", 105, 0) then saveAsTune(saveAsName) end
-
-    if activeTuneReadOnly then ImGui.BeginDisabled() end
-    if ImGui.Button("Delete saved tune", 150, 0) then
-        pendingDeleteTuneId = activeTuneId
-        ImGui.OpenPopup("Delete saved tune?###delete_tune_confirmation")
+    if ImGui.BeginPopup("Save tune as###save_as_confirmation") then
+        ImGui.Text("Save this tune as:")
+        ImGui.SetNextItemWidth(300)
+        saveAsName = ImGui.InputText("##save_as_name", saveAsName, 96)
+        ImGui.Separator()
+        if ImGui.Button("Confirm", 100, 0) then
+            if saveAsTune(saveAsName) then ImGui.CloseCurrentPopup() end
+        end 
+        ImGui.SameLine()
+        if ImGui.Button("Cancel", 100, 0) then
+            ImGui.CloseCurrentPopup()
+        end
+        ImGui.EndPopup()
     end
-    if activeTuneReadOnly then ImGui.EndDisabled() end
 
     if ImGui.BeginPopup("Delete saved tune?###delete_tune_confirmation") then
-        ImGui.TextWrapped("Permanently delete \"" .. tostring(pendingDeleteTuneId) ..
-            "\" for " .. tostring(currentVeh() and currentVeh().name or "this vehicle") .. "?")
+        ImGui.Text("Permanently delete this tune?")
+        ImGui.Text(tostring(pendingDeleteTuneId))
         if activeTuneDirty() then
-            ImGui.TextWrapped("Any unsaved changes in this tune will also be discarded.")
+            ImGui.Text("Unsaved changes will also be discarded.")
         end
         ImGui.Separator()
-        if ImGui.Button("Delete permanently", 145, 0) then
+        if ImGui.Button("Confirm", 100, 0) then
             if pendingDeleteTuneId == activeTuneId then deleteActiveTune() end
             pendingDeleteTuneId = nil
             ImGui.CloseCurrentPopup()
         end
         ImGui.SameLine()
-        if ImGui.Button("Cancel", 90, 0) then
+        if ImGui.Button("Cancel", 100, 0) then
             pendingDeleteTuneId = nil
             ImGui.CloseCurrentPopup()
         end
         ImGui.EndPopup()
     end
 
-    if activeTuneReadOnly then
-        ImGui.PushStyleColor(ImGuiCol.Text, 0.55, 0.75, 1.0, 1.0)
-        ImGui.Text("READ ONLY: use Save As to create an editable tune.")
-        ImGui.PopStyleColor()
-    elseif activeTuneDirty() then
-        ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.67, 0.15, 1.0)
-        ImGui.Text("UNSAVED CHANGES")
-        ImGui.PopStyleColor()
-    else
-        ImGui.PushStyleColor(ImGuiCol.Text, 0.25, 1.0, 0.55, 1.0)
-        ImGui.Text("SAVED")
-        ImGui.PopStyleColor()
+    -- ImGui.Text("Parameters differing from Vanilla: " .. tostring(countEditedParameters()))
+    -- ImGui.TextWrapped(configStatus)
+
+    ImGui.Spacing()
+    ImGui.Spacing()
+    ImGui.Spacing()
+    ImGui.Spacing()
+
+    ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.78, 0.20, 1.0)
+    ImGui.TextWrapped("Exit and re-enter or respawn the vehicle to apply changes.")
+    ImGui.PopStyleColor()
+
+    ImGui.SameLine()
+    if pendingRespawn then ImGui.BeginDisabled() end
+    if ImGui.Button("Respawn Last Vehicle", 200, 0) then
+        recycleLastVehicle()
     end
-    ImGui.Text("Parameters differing from Vanilla: " .. tostring(countEditedParameters()))
-    ImGui.TextWrapped(configStatus)
-    ImGui.TextDisabled("* green = differs from Vanilla    ! amber = not saved to this tune")
+    if pendingRespawn then ImGui.EndDisabled() end
+
+    ImGui.Spacing()
+    ImGui.Spacing()
+    ImGui.Spacing()
+    ImGui.Spacing()
+
+    ImGui.PushStyleColor(ImGuiCol.Text, 0.25, 1.0, 0.55, 1.0)
+    ImGui.Text("* green = differs from Vanilla")
+    ImGui.PopStyleColor()
+    ImGui.SameLine(240)
+    ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.67, 0.15, 1.0)
+    ImGui.Text("! amber = not saved to this tune")
+    ImGui.PopStyleColor()
 end
 
 local function drawVehiclePanel()
@@ -2180,7 +2239,7 @@ local function drawVehiclePanel()
     local preview = veh and (veh.name .. " [" .. veh.class .. "]") or "Select vehicle"
 
     ImGui.TextDisabled("VEHICLE TO EDIT")
-    ImGui.SetNextItemWidth(ImGui.GetWindowContentRegionWidth())
+    ImGui.SetNextItemWidth(ImGui.GetWindowContentRegionWidth() - 180)
     if ImGui.BeginCombo("##vehicle", preview, ImGuiComboFlags.HeightLargest) then
         local lastClass = nil
         for i, v in ipairs(VEHICLES) do
@@ -2196,23 +2255,15 @@ local function drawVehiclePanel()
         ImGui.EndCombo()
     end
 
-    if ImGui.Button("Use current vehicle", 180, 0) then selectMounted() end
     ImGui.SameLine()
-    if pendingRespawn then ImGui.BeginDisabled() end
-    if ImGui.Button("Recycle last vehicle (exit first)", ImGui.GetContentRegionAvail(), 0) then
-        recycleLastVehicle()
-    end
-    if pendingRespawn then ImGui.EndDisabled() end
+    if ImGui.Button("Use Current Vehicle", 180, 0) then selectMounted() end
 
-    ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.78, 0.20, 1.0)
-    ImGui.TextWrapped("Exit and get back into the vehicle to load changed physics. Recycle is an optional shortcut after exiting.")
-    ImGui.PopStyleColor()
-    if veh and activeTuneId == VANILLA_TUNE then
-        ImGui.Text("This vehicle currently uses the live Vanilla baseline.")
-    elseif veh then
-        ImGui.Text("Active tune applies only to " .. veh.name .. ".")
-    end
-    ImGui.TextWrapped(statusMessage)
+    -- if veh and activeTuneId == VANILLA_TUNE then
+    --     ImGui.Text("This vehicle currently uses the live Vanilla baseline.")
+    -- elseif veh then
+    --     ImGui.Text("Active tune applies only to " .. veh.name .. ".")
+    -- end
+    -- ImGui.TextWrapped(statusMessage)
 end
 
 local function drawUI()
