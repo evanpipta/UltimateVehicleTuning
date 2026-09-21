@@ -652,6 +652,8 @@ local appliedList = {}
 local statusMessage = "Open this window in the CET overlay to tune vehicles."
 local configStatus = "Loading vehicle tunes..."
 local tdbReady = false
+local GEAR_DEBUG_LOG = "UltimateVehicleTuning.log"
+local gearRecordWriters = {}
 local pendingRespawn = nil
 local lastMountedRecordName = nil
 local autoSave = true
@@ -1336,6 +1338,71 @@ local function applyGearMaps(gearIds, params)
     end
 end
 
+local function debugRecordName(recordId)
+    local ok, name = pcall(function() return TDBID.ToStringDEBUG(recordId) end)
+    if ok and name and name ~= "" then return tostring(name) end
+    return tostring(recordId)
+end
+
+local function appendGearDebug(message)
+    pcall(function()
+        local file = io.open(GEAR_DEBUG_LOG, "a")
+        if not file then return end
+        file:write(tostring(os.date("%Y-%m-%d %H:%M:%S")), " ", tostring(message), "\n")
+        file:close()
+    end)
+end
+
+local function resetGearDebug()
+    gearRecordWriters = {}
+    pcall(function()
+        local file = io.open(GEAR_DEBUG_LOG, "w")
+        if not file then return end
+        file:write("Ultimate Vehicle Tuning bike gear trace\n")
+        file:write("Each engine contains reverse followed by its forward gears.\n")
+        file:close()
+    end)
+end
+
+local function isBikeRecord(vehId)
+    local id = tostring(vehId or ""):lower()
+    return id:find("sportbike", 1, true) ~= nil or id:find("_bike", 1, true) ~= nil
+end
+
+local function captureGearMaxSpeeds(gearIds)
+    local values = {}
+    for index, gearId in ipairs(gearIds or {}) do
+        values[index] = getFlat(gearId, "maxSpeed")
+    end
+    return values
+end
+
+local function logBikeGearWrite(vehId, chain, params, before)
+    if not isBikeRecord(vehId) then return end
+
+    appendGearDebug(string.format(
+        "VEHICLE %s | engine=%s | records=%d",
+        tostring(vehId), debugRecordName(chain.engId), #(chain.gearIds or {})))
+
+    for index, gearId in ipairs(chain.gearIds or {}) do
+        local recordName = debugRecordName(gearId)
+        local previousWriter = gearRecordWriters[recordName]
+        local requested = params["gear_" .. index .. "_max_speed"]
+        local after = getFlat(gearId, "maxSpeed")
+        local collision = previousWriter and previousWriter ~= vehId
+            and (" | PREVIOUS_WRITER=" .. previousWriter) or ""
+        appendGearDebug(string.format(
+            "  record[%d]=%s | maxSpeed %s -> requested %s -> live %s%s",
+            index,
+            recordName,
+            tostring(before[index]),
+            tostring(requested),
+            tostring(after),
+            collision))
+        gearRecordWriters[recordName] = vehId
+    end
+end
+
 local function readFirstMap(recordIds, map, params)
     local recordId = recordIds and recordIds[1] or nil
     if recordId then readMap(recordId, map, params) end
@@ -1396,6 +1463,7 @@ local function writeVehicle(vehId, params)
     local ok, err = pcall(function()
         local chain, resolveErr = resolveChain(vehId)
         if not chain then error(resolveErr or "resolve failed") end
+        local gearMaxSpeedsBefore = captureGearMaxSpeeds(chain.gearIds)
 
         table.insert(appliedList, "--- " .. vehId .. " ---")
         table.insert(appliedList, "DM: " .. TDBID.ToStringDEBUG(chain.dmId))
@@ -1439,6 +1507,7 @@ local function writeVehicle(vehId, params)
             table.insert(appliedList, "REAR skipped (shared with front)")
         end
 
+        logBikeGearWrite(vehId, chain, params, gearMaxSpeedsBefore)
         TweakDB:Update(TweakDBID.new(vehId))
     end)
     if not ok then
@@ -2458,6 +2527,7 @@ local function drawUI()
 end
 
 registerForEvent("onInit", function()
+    resetGearDebug()
     discoverOfficialVehicles()
 
     local loadedMetadata = loadJSON(METADATA_FILE)
