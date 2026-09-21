@@ -672,6 +672,8 @@ local loadingMountedTuneApplied = false
 local TUNES_ROOT = "tunes"
 local VANILLA_TUNE = "vanilla"
 local MODDED_DEFAULT_TUNE = "modded_default"
+-- Authoring switch: allow Modded default tunes to be edited and saved in-game.
+local MODDED_DEFAULT_EDITABLE = false
 local BASE_CONFIG_FILE = "config_base.json"
 local METADATA_FILE = "metadata.json"
 
@@ -953,7 +955,7 @@ local function refreshTuneFiles(vehId)
             id = MODDED_DEFAULT_TUNE,
             file = defaultPath,
             label = "Modded default",
-            readOnly = true,
+            readOnly = not MODDED_DEFAULT_EDITABLE,
         })
     end
 
@@ -1845,7 +1847,8 @@ end
 
 local function deleteActiveTune()
     local veh = currentVeh()
-    if not veh or activeTuneReadOnly or not activeTunePath then
+    if not veh or activeTuneReadOnly or not activeTunePath or
+        activeTuneId:lower() == MODDED_DEFAULT_TUNE then
         configStatus = "Vanilla and Modded default cannot be deleted."
         return false
     end
@@ -2338,9 +2341,10 @@ local function drawTunePanel()
     if ImGui.Button("Discard Changes", 160, 0) then discardActiveChanges() end
     if wasDirty then ImGui.PopStyleColor(3) end
     if not wasDirty then ImGui.EndDisabled() end
-    if activeTuneReadOnly then ImGui.BeginDisabled() end
+    local canDeleteTune = not activeTuneReadOnly and activeTuneId:lower() ~= MODDED_DEFAULT_TUNE
+    if not canDeleteTune then ImGui.BeginDisabled() end
     ImGui.SameLine()
-    if not activeTuneReadOnly then
+    if canDeleteTune then
         ImGui.PushStyleColor(ImGuiCol.Button, 0.62, 0.10, 0.10, 1.0)
         ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0.82, 0.16, 0.16, 1.0)
         ImGui.PushStyleColor(ImGuiCol.ButtonActive, 0.48, 0.06, 0.06, 1.0)
@@ -2349,8 +2353,8 @@ local function drawTunePanel()
         pendingDeleteTuneId = activeTuneId
         ImGui.OpenPopup("Delete saved tune?###delete_tune_confirmation")
     end
-    if not activeTuneReadOnly then ImGui.PopStyleColor(3) end
-    if activeTuneReadOnly then ImGui.EndDisabled() end
+    if canDeleteTune then ImGui.PopStyleColor(3) end
+    if not canDeleteTune then ImGui.EndDisabled() end
     ImGui.SameLine()
     if activeTuneReadOnly then ImGui.BeginDisabled() end
     local autoValue, autoChanged = ImGui.Checkbox("Auto-save", autoSave)
