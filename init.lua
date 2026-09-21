@@ -657,6 +657,9 @@ local tuneFiles = {}
 local saveAsName = "my_tune.json"
 local pendingDeleteTuneId = nil
 local metadata = { version = 2, autoSave = true, vehicles = {} }
+local gameSessionActive = false
+local loadingTunesApplied = false
+local loadingMountedTuneApplied = false
 
 local TUNES_ROOT = "tunes"
 local VANILLA_TUNE = "vanilla"
@@ -1530,31 +1533,35 @@ local function applySelectedTunes()
         refreshTuneFiles(veh.id)
         local tune = findTune(state.activeTune)
         if not tune then
-            state.activeTune = findTune(MODDED_DEFAULT_TUNE) and MODDED_DEFAULT_TUNE or VANILLA_TUNE
-            tune = findTune(state.activeTune)
+            errors = errors + 1
+            print("[UltimateVehicleTuning] Preserving unavailable tune selection \"" ..
+                tostring(state.activeTune) .. "\" for " .. veh.id)
         end
-        local values = {}
         if tune and not tune.vanilla and type(tune.file) == "string" then
             local document = loadJSON(tune.file)
             local documentValues = type(document) == "table" and document.values or nil
             local documentVehicleId = type(document) == "table" and document.vehicleId or nil
             if type(documentValues) == "table" and documentVehicleId == veh.id then
-                values = copyTbl(documentValues)
-            end
-        end
-        local params = copyTbl(stock[veh.id] or {})
-        for key, value in pairs(values) do params[key] = value end
-        if next(params) then
-            local ok, err = applyToVariants(veh, params)
-            if ok then
-                count = count + 1
+                local params = copyTbl(stock[veh.id] or {})
+                for key, value in pairs(documentValues) do params[key] = value end
+                if next(params) then
+                    local ok, err = applyToVariants(veh, params)
+                    if ok then
+                        count = count + 1
+                    else
+                        errors = errors + 1
+                        lastError = tostring(err)
+                    end
+                end
             else
                 errors = errors + 1
-                lastError = tostring(err)
+                print("[UltimateVehicleTuning] Invalid selected tune \"" ..
+                    tostring(state.activeTune) .. "\" for " .. veh.id)
             end
         end
     end
-    persistMetadata()
+    local activeVeh = currentVeh()
+    if activeVeh then refreshTuneFiles(activeVeh.id) end
     statusMessage = "Applied selected tunes to " .. count .. " vehicles."
     print("[UltimateVehicleTuning] Applied per-vehicle tunes: " .. count ..
         " vehicles, " .. errors .. " errors")
@@ -1593,8 +1600,6 @@ local function initializeTuneStorage(baseDocument)
         if cleanSlate then
             state.activeTune = hasDefault and MODDED_DEFAULT_TUNE or VANILLA_TUNE
             state.tuneIndex = {}
-        elseif state.activeTune == MODDED_DEFAULT_TUNE and not hasDefault then
-            state.activeTune = VANILLA_TUNE
         end
     end
     persistMetadata()
@@ -1654,6 +1659,13 @@ local function loadVehicleTune(index, tuneId, discardDirty, applyLive)
     presetDirty = false
     loadEditorFrom(mergedPresetParams(veh.id, saved))
 
+    local metadataOk, metadataErr = persistMetadata()
+    if not metadataOk then
+        lastError = "Could not save selected tune: " .. tostring(metadataErr)
+        configStatus = lastError
+        return false
+    end
+
     if applyLive then
         local ok, err = applyToVariants(veh, edit)
         if not ok then
@@ -1663,7 +1675,6 @@ local function loadVehicleTune(index, tuneId, discardDirty, applyLive)
         end
     end
     configStatus = "Loaded " .. tune.label .. (tune.readOnly and " (read-only)" or "")
-    persistMetadata()
     return true
 end
 
@@ -1787,6 +1798,14 @@ local function normalizeRecordName(raw)
     return raw
 end
 
+local function isGameSessionReady()
+    local ok, ready = pcall(function()
+        local player = Game.GetPlayer()
+        return player ~= nil and player:IsAttached()
+    end)
+    return ok and ready == true
+end
+
 local function mountedRecordName()
     local ok, name = pcall(function()
         local player = Game.GetPlayer()
@@ -1892,7 +1911,70 @@ local function recordMatches(mounted, listed)
     return false
 end
 
-local function selectMounted(silent)
+local function vehicleRecordName(vehicle)
+    local ok, name = pcall(function()
+        if not vehicle then return nil end
+        local rid = vehicle:GetRecordID()
+        if rid and rid.value and rid.value ~= "" then
+            return normalizeRecordName(rid.value)
+        end
+        return normalizeRecordName(TDBID.ToStringDEBUG(rid))
+    end)
+    if ok then return name end
+    return nil
+end
+
+local function listedVehicleForRecord(recordName)
+    if not recordName then return nil, nil end
+    for index, veh in ipairs(VEHICLES) do
+        for _, id in ipairs(candidateIds(veh)) do
+            if recordName:lower() == id:lower() then return index, veh end
+        end
+    end
+    for index, veh in ipairs(VEHICLES) do
+        for _, id in ipairs(candidateIds(veh)) do
+            if recordMatches(recordName, id) then return index, veh end
+        end
+    end
+    return nil, nil
+end
+
+local function applyPersistedTuneBeforeVehicleAttach(recordName)
+    local _, veh = listedVehicleForRecord(recordName)
+    if not veh then return false end
+
+    local state = vehicleMetadata(veh.id)
+    if state.activeTune:lower() == VANILLA_TUNE then return true end
+
+    local filename
+    if state.activeTune:lower() == MODDED_DEFAULT_TUNE then
+        filename = MODDED_DEFAULT_TUNE .. ".json"
+    else
+        filename = safeTuneFilename(state.activeTune)
+    end
+    local tuneDir = vehicleTuneDir(veh.id)
+    local document = filename and tuneDir and loadJSON(tuneDir .. "/" .. filename) or nil
+    if not validTuneDocument(document, veh.id) then
+        print("[UltimateVehicleTuning] Could not preload selected tune \"" ..
+            tostring(state.activeTune) .. "\" for " .. veh.id)
+        return false
+    end
+
+    if not captureVehicleStock(veh) then return false end
+    local params = copyTbl(stock[veh.id] or {})
+    for key, value in pairs(document.values or {}) do params[key] = value end
+    local ok, err = applyToVariants(veh, params)
+    if not ok then
+        print("[UltimateVehicleTuning] Vehicle attach tune failed for " ..
+            veh.id .. ": " .. tostring(err))
+        return false
+    end
+    print("[UltimateVehicleTuning] Preloaded " .. tostring(state.activeTune) ..
+        " before attaching " .. veh.id)
+    return true
+end
+
+local function selectMounted(silent, applyLive)
     local mounted = mountedRecordName()
     if not mounted then
         if not silent then statusMessage = "You are not in a vehicle." end
@@ -1916,7 +1998,7 @@ local function selectMounted(silent)
     for i, veh in ipairs(VEHICLES) do
         for _, id in ipairs(candidateIds(veh)) do
             if mounted:lower() == id:lower() then
-                return selectMatch(i, veh)
+                return selectMatch(i, veh, applyLive == true)
             end
         end
     end
@@ -1926,7 +2008,7 @@ local function selectMounted(silent)
     for i, veh in ipairs(VEHICLES) do
         for _, id in ipairs(candidateIds(veh)) do
             if recordMatches(mounted, id) then
-                return selectMatch(i, veh)
+                return selectMatch(i, veh, applyLive == true)
             end
         end
     end
@@ -2338,11 +2420,50 @@ registerForEvent("onInit", function()
     captureSessionStock()
     applySelectedTunes()
     loadVehicleTune(selected, vehicleMetadata(VEHICLES[selected].id).activeTune, true, false)
+    gameSessionActive = isGameSessionReady()
 
     tdbReady = true
+    if gameSessionActive then selectMounted(true, true) end
     if cleanSlate then
         configStatus = "Created per-vehicle Modded default tunes from config_base.json."
     end
+
+    local vehicleObserverOk, vehicleObserverErr = pcall(function()
+        Observe("VehicleObject", "OnGameAttached", function(vehicle)
+            local recordName = vehicleRecordName(vehicle)
+            if recordName then applyPersistedTuneBeforeVehicleAttach(recordName) end
+        end)
+    end)
+    if not vehicleObserverOk then
+        print("[UltimateVehicleTuning] Could not register vehicle attach observer: " ..
+            tostring(vehicleObserverErr))
+    end
+
+    Observe("LoadingScreenProgressBarController", "SetProgress", function(_, progress)
+        if type(progress) ~= "number" then progress = _ end
+        if type(progress) ~= "number" or not tdbReady then return end
+
+        if progress < 1.0 then
+            if not loadingTunesApplied then
+                loadingTunesApplied = true
+                applySelectedTunes()
+                print("[UltimateVehicleTuning] Applied selected tunes during game loading.")
+            end
+            if not loadingMountedTuneApplied and mountedRecordName() then
+                loadingMountedTuneApplied = selectMounted(true, true)
+                if loadingMountedTuneApplied then
+                    print("[UltimateVehicleTuning] Applied mounted vehicle tune during game loading.")
+                end
+            end
+        else
+            if loadingTunesApplied and not loadingMountedTuneApplied and mountedRecordName() then
+                loadingMountedTuneApplied = selectMounted(true, true)
+            end
+            loadingTunesApplied = false
+            loadingMountedTuneApplied = false
+        end
+    end)
+
     print("[UltimateVehicleTuning] CET UI ready. Open the overlay to tune vehicles.")
 end)
 
@@ -2357,6 +2478,16 @@ end)
 registerForEvent("onOverlayClose", function() showOverlay = false end)
 
 registerForEvent("onUpdate", function(deltaTime)
+    local sessionReady = isGameSessionReady()
+    if sessionReady and not gameSessionActive and tdbReady then
+        gameSessionActive = true
+        applySelectedTunes()
+        selectMounted(true, true)
+        print("[UltimateVehicleTuning] Reapplied selected tunes after game session start.")
+    elseif not sessionReady then
+        gameSessionActive = false
+    end
+
     local mounted = mountedRecordName()
     if mounted then lastMountedRecordName = mounted end
     updatePendingRespawn(deltaTime)
