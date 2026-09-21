@@ -288,13 +288,16 @@ local PARAMS = {
     { key = "burnout_grip_launch_speed", group = "BURNOUT & LAUNCH GRIP", label = "Grip-Bonus Maximum Launch Speed", fmt = "%.1f m/s", absMin = 0, absMax = 200 },
     { key = "burnout_brake_mod_min", group = "BURNOUT & LAUNCH GRIP", label = "Minimum Brake Modifier", fmt = "%.3f", absMin = 0, absMax = 10 },
     { key = "burnout_brake_mod_max", group = "BURNOUT & LAUNCH GRIP", label = "Maximum Brake Modifier", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "bike_tilt_speed", group = "BIKE DYNAMICS", label = "Tilt Speed", fmt = "%.2f", absMin = 0, absMax = 50 },
-    { key = "bike_tilt_return_speed", group = "BIKE DYNAMICS", label = "Tilt Return Speed", fmt = "%.2f", absMin = 0, absMax = 50 },
-    { key = "bike_tilt_custom_speed", group = "BIKE DYNAMICS", label = "Custom Tilt Speed", fmt = "%.2f", absMin = 0, absMax = 50 },
+    { key = "bike_tilt_speed", group = "BIKE DYNAMICS", label = "Tilt Speed", fmt = "%.2f", absMin = 0, absMax = 200 },
+    { key = "bike_tilt_return_speed", group = "BIKE DYNAMICS", label = "Tilt Return Speed", fmt = "%.2f", absMin = 0, absMax = 200 },
+    { key = "bike_tilt_custom_speed", group = "BIKE DYNAMICS", label = "Custom Tilt Speed", fmt = "%.2f", absMin = 0, absMax = 200 },
     { key = "bike_max_tilt", group = "BIKE DYNAMICS", label = "Maximum Tilt", fmt = "%.1f deg", absMin = 0, absMax = 90 },
     { key = "bike_max_com_long", group = "BIKE DYNAMICS", label = "Maximum COM Longitudinal Offset", fmt = "%.3f m", absMin = -3, absMax = 3 },
     { key = "bike_min_com_long", group = "BIKE DYNAMICS", label = "Minimum COM Longitudinal Offset", fmt = "%.3f m", absMin = -3, absMax = 3 },
     { key = "bike_com_damping", group = "BIKE DYNAMICS", label = "COM Offset Damping", fmt = "%.2f", absMin = 0, absMax = 20 },
+    { key = "bike_tilt_pid_p", group = "BIKE DYNAMICS", label = "Tilt PID Proportional", fmt = "%.3f", absMin = 0, absMax = 20 },
+    { key = "bike_tilt_pid_i", group = "BIKE DYNAMICS", label = "Tilt PID Integral", fmt = "%.3f", absMin = 0, absMax = 10 },
+    { key = "bike_tilt_pid_d", group = "BIKE DYNAMICS", label = "Tilt PID Derivative", fmt = "%.3f", absMin = -10, absMax = 20 },
 }
 
 for gear = 1, 8 do
@@ -396,6 +399,9 @@ local VECTOR_DM = {
     center_of_mass_offset = { x = "com_x", y = "com_y", z = "com_z" },
     momentOfInertia = { x = "inertia_x", y = "inertia_y", z = "inertia_z" },
     momentOfInertiaScale = { x = "inertia_scale_x", y = "inertia_scale_y", z = "inertia_scale_z" },
+}
+local ARRAY_DM = {
+    bikeTiltPID = { "bike_tilt_pid_p", "bike_tilt_pid_i", "bike_tilt_pid_d" },
 }
 local ENG = {
     max_torque = "engineMaxTorque", resistance_torque = "resistanceTorque",
@@ -1260,6 +1266,47 @@ local function applyVectorMap(recordId, map, params)
     return changed
 end
 
+local function arrayComponent(value, index)
+    if value == nil then return nil end
+    local ok, component = pcall(function() return value[index] end)
+    if ok then return asNumber(component) end
+    return nil
+end
+
+local function readArrayMap(recordId, map, params)
+    if not recordId then return end
+    for flat, keys in pairs(map) do
+        local value = getRawFlat(recordId, flat)
+        for index, key in ipairs(keys) do
+            local component = arrayComponent(value, index)
+            if component ~= nil then params[key] = component end
+        end
+    end
+end
+
+local function applyArrayMap(recordId, map, params)
+    if not recordId then return false end
+    local changed = false
+    for flat, keys in pairs(map) do
+        local before = getRawFlat(recordId, flat)
+        local values = {}
+        local complete = true
+        for index, key in ipairs(keys) do
+            values[index] = params[key] ~= nil and params[key] or arrayComponent(before, index)
+            if values[index] == nil then complete = false end
+        end
+        if complete then
+            TweakDB:SetFlat(TweakDBID.new(recordId, "." .. flat), values)
+            table.insert(appliedList, string.format(
+                "  %s: [%.3f, %.3f, %.3f] [OK]",
+                flat, values[1], values[2], values[3]))
+            changed = true
+        end
+    end
+    if changed then TweakDB:Update(recordId) end
+    return changed
+end
+
 local GEAR_FLATS = {
     min_speed = "minSpeed", max_speed = "maxSpeed",
     min_rpm = "minEngineRPM", max_rpm = "maxEngineRPM",
@@ -1318,6 +1365,7 @@ local function readVehicle(vehId)
     local params = {}
     readMap(chain.dmId, DM, params)
     readVectorMap(chain.dmId, VECTOR_DM, params)
+    readArrayMap(chain.dmId, ARRAY_DM, params)
     if chain.engId then readMap(chain.engId, ENG, params) end
     readGearMaps(chain.gearIds, params)
     readMap(chain.frontDimensionsId, FRONT_DIMENSIONS, params)
@@ -1353,6 +1401,7 @@ local function writeVehicle(vehId, params)
         table.insert(appliedList, "DM: " .. TDBID.ToStringDEBUG(chain.dmId))
         applyMap(chain.dmId, DM, params)
         applyVectorMap(chain.dmId, VECTOR_DM, params)
+        applyArrayMap(chain.dmId, ARRAY_DM, params)
 
         if chain.engId then
             table.insert(appliedList, "ENG: " .. TDBID.ToStringDEBUG(chain.engId))
@@ -2310,7 +2359,7 @@ local function drawTunePanel()
     ImGui.PushStyleColor(ImGuiCol.Text, 0.25, 1.0, 0.55, 1.0)
     ImGui.Text("* green = differs from Vanilla")
     ImGui.PopStyleColor()
-    ImGui.SameLine(240)
+    ImGui.SameLine(270)
     ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.67, 0.15, 1.0)
     ImGui.Text("! amber = not saved to this tune")
     ImGui.PopStyleColor()
