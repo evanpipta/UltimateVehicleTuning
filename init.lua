@@ -639,30 +639,29 @@ local showAdvanced = false
 local selected = 1
 local edit = {}
 local stock = {}
-local vanillaStock = {}
-local runtimeStock = {}
 local saved = {}
 local diskSaved = {}
-local vehicleCount = 0
 local lastError = ""
 local appliedList = {}
 local statusMessage = "Open this window in the CET overlay to tune vehicles."
-local configStatus = "Loading presets..."
+local configStatus = "Loading vehicle tunes..."
 local tdbReady = false
 local pendingRespawn = nil
 local lastMountedRecordName = nil
 local autoSave = true
-local activeConfigFile = "config.json"
-local activeConfigReadOnly = false
+local activeTuneId = "vanilla"
+local activeTunePath = nil
+local activeTuneReadOnly = true
 local presetDirty = false
-local presetFiles = {}
-local saveAsName = "config_new.json"
-local metadata = { version = 1, activeConfig = "config.json", autoSave = true, presetIndex = { "config.json" } }
+local tuneFiles = {}
+local saveAsName = "my_tune.json"
+local pendingDeleteTuneId = nil
+local metadata = { version = 2, autoSave = true, vehicles = {} }
 
-local STOCK_FILE = "stock.json"
-local RUNTIME_STOCK_FILE = "stock_runtime.json"
+local TUNES_ROOT = "tunes"
+local VANILLA_TUNE = "vanilla"
+local MODDED_DEFAULT_TUNE = "modded_default"
 local BASE_CONFIG_FILE = "config_base.json"
-local DEFAULT_CONFIG_FILE = "config.json"
 local METADATA_FILE = "metadata.json"
 
 local LEGACY_KEYS = {
@@ -798,87 +797,117 @@ local function saveJSON(path, data)
     return ok, err
 end
 
-local function safeConfigFilename(name)
+local function safeTuneFilename(name)
     if type(name) ~= "string" then return nil end
     name = name:match("^%s*(.-)%s*$")
     if name == "" or name:find("..", 1, true) or
         name:find("/", 1, true) or name:find("\\", 1, true) then return nil end
-    if not name:lower():match("^config.*%.json$") then return nil end
+    if not name:match("^[%w _%-%.]+$") then return nil end
+    if not name:lower():match("%.json$") then name = name .. ".json" end
+    local lower = name:lower()
+    if lower == "vanilla.json" or lower == MODDED_DEFAULT_TUNE .. ".json" then return nil end
     return name
 end
 
-local function countSavedVehicles()
+local function vehicleFolderName(vehId)
+    local folder = tostring(vehId or ""):gsub("[^%w%._%-]", "_")
+    if folder == "" or folder == "." or folder == ".." then return nil end
+    return folder
+end
+
+local function vehicleTuneDir(vehId)
+    local folder = vehicleFolderName(vehId)
+    if not folder then return nil end
+    return TUNES_ROOT .. "/" .. folder
+end
+
+local function ensureDirectory(path)
+    if type(path) ~= "string" or path == "" or path:find("..", 1, true) then return false end
+    local ok, entries = pcall(function() return dir(path) end)
+    if ok and type(entries) == "table" then return true end
+    local command = 'mkdir "' .. path:gsub("/", "\\") .. '" >nul 2>nul'
+    pcall(function() os.execute(command) end)
+    ok, entries = pcall(function() return dir(path) end)
+    return ok and type(entries) == "table"
+end
+
+local function ensureVehicleTuneDirectory(vehId)
+    if not ensureDirectory(TUNES_ROOT) then return false end
+    local path = vehicleTuneDir(vehId)
+    return path ~= nil and ensureDirectory(path)
+end
+
+local function countEditedParameters()
+    local veh = VEHICLES[selected]
+    if not veh then return 0 end
     local count = 0
-    for vehId, params in pairs(saved) do
-        local edited = stock[vehId] == nil
-        if type(params) == "table" then
-            for key, value in pairs(params) do
-                local vanilla = stock[vehId] and stock[vehId][key] or nil
-                if type(value) == "number" and type(vanilla) == "number" then
-                    if math.abs(value - vanilla) > 0.001 then edited = true break end
-                elseif value ~= vanilla then
-                    edited = true
-                    break
-                end
-            end
+    for key, value in pairs(saved[veh.id] or {}) do
+        local vanilla = stock[veh.id] and stock[veh.id][key] or nil
+        if type(value) == "number" and type(vanilla) == "number" then
+            if math.abs(value - vanilla) > 0.001 then count = count + 1 end
+        elseif value ~= vanilla then
+            count = count + 1
         end
-        if edited then count = count + 1 end
     end
-    vehicleCount = count
     return count
 end
 
-local function activeConfigDirty()
+local function activeTuneDirty()
     return presetDirty
 end
 
 local function persistMetadata()
-    metadata.version = 1
-    metadata.activeConfig = activeConfigFile
+    metadata.version = 2
     metadata.autoSave = autoSave
-    local index, seen = {}, {}
-    for _, preset in ipairs(presetFiles) do
-        local file = safeConfigFilename(preset.file)
-        if file and not seen[file:lower()] then
-            table.insert(index, file)
-            seen[file:lower()] = true
-        end
-    end
-    metadata.presetIndex = index
+    metadata.vehicles = metadata.vehicles or {}
     return saveJSON(METADATA_FILE, metadata)
 end
 
-local function persistActiveConfig()
-    if activeConfigReadOnly then
-        return false, "The selected baseline is read-only. Use Save As to create an editable preset."
+local function persistActiveTune()
+    local veh = VEHICLES[selected]
+    if not veh then return false, "No vehicle selected." end
+    if activeTuneReadOnly or not activeTunePath then
+        return false, "The selected tune is read-only. Use Save As to create an editable tune."
     end
-    local ok, err = saveJSON(activeConfigFile, {
-        selectedId = VEHICLES[selected] and VEHICLES[selected].id or nil,
-        vehicles = saved,
+    local ok, err = saveJSON(activeTunePath, {
+        version = 1,
+        vehicleId = veh.id,
+        values = saved[veh.id] or {},
     })
     if ok then
         diskSaved = copyVehicleMap(saved)
         presetDirty = false
-        countSavedVehicles()
-        configStatus = "Saved " .. activeConfigFile
+        configStatus = "Saved " .. activeTuneId
         persistMetadata()
         return true
     end
-    return false, tostring(err or "Could not save preset")
+    return false, tostring(err or "Could not save tune")
 end
 
-local function persistRuntimeStock()
-    return saveJSON(RUNTIME_STOCK_FILE, runtimeStock)
+local function validTuneDocument(data, vehId)
+    return type(data) == "table" and data.vehicleId == vehId and type(data.values) == "table"
 end
 
 local function validPresetDocument(data)
     return type(data) == "table" and type(data.vehicles) == "table"
 end
 
-local function refreshPresetFiles()
+local function vehicleMetadata(vehId)
+    metadata.vehicles = metadata.vehicles or {}
+    local state = metadata.vehicles[vehId]
+    if type(state) ~= "table" then
+        state = { activeTune = VANILLA_TUNE, tuneIndex = {} }
+        metadata.vehicles[vehId] = state
+    end
+    if type(state.tuneIndex) ~= "table" then state.tuneIndex = {} end
+    if type(state.activeTune) ~= "string" then state.activeTune = VANILLA_TUNE end
+    return state
+end
+
+local function refreshTuneFiles(vehId)
     local names, seen = {}, {}
     local function addName(name)
-        name = safeConfigFilename(name)
+        name = safeTuneFilename(name)
         if not name then return end
         local key = name:lower()
         if not seen[key] then
@@ -887,11 +916,11 @@ local function refreshPresetFiles()
         end
     end
 
-    addName(DEFAULT_CONFIG_FILE)
-    addName(BASE_CONFIG_FILE)
-    for _, name in ipairs(metadata.presetIndex or {}) do addName(name) end
+    local state = vehicleMetadata(vehId)
+    for _, name in ipairs(state.tuneIndex) do addName(name) end
 
-    local ok, entries = pcall(function() return dir(".") end)
+    local tuneDir = vehicleTuneDir(vehId)
+    local ok, entries = pcall(function() return tuneDir and dir(tuneDir) or nil end)
     if ok and type(entries) == "table" then
         for _, entry in ipairs(entries) do
             if type(entry) == "table" and (entry.type == nil or entry.type == "file") then
@@ -902,32 +931,44 @@ local function refreshPresetFiles()
         end
     end
 
-    table.sort(names, function(a, b)
-        if a:lower() == DEFAULT_CONFIG_FILE then return true end
-        if b:lower() == DEFAULT_CONFIG_FILE then return false end
-        if a:lower() == BASE_CONFIG_FILE then return false end
-        if b:lower() == BASE_CONFIG_FILE then return true end
-        return a:lower() < b:lower()
-    end)
+    table.sort(names, function(a, b) return a:lower() < b:lower() end)
+    tuneFiles = {
+        { id = VANILLA_TUNE, label = "Vanilla", readOnly = true, vanilla = true },
+    }
+    local defaultPath = tuneDir and (tuneDir .. "/" .. MODDED_DEFAULT_TUNE .. ".json") or nil
+    local defaultData = defaultPath and loadJSON(defaultPath) or nil
+    if validTuneDocument(defaultData, vehId) then
+        table.insert(tuneFiles, {
+            id = MODDED_DEFAULT_TUNE,
+            file = defaultPath,
+            label = "Modded default",
+            readOnly = true,
+        })
+    end
 
-    presetFiles = {}
+    local validIndex = {}
     for _, name in ipairs(names) do
-        local data = loadJSON(name)
-        if validPresetDocument(data) then
-            table.insert(presetFiles, {
-                file = name,
-                label = name,
-                readOnly = name:lower() == BASE_CONFIG_FILE,
-                vanilla = false,
+        local path = tuneDir .. "/" .. name
+        local data = loadJSON(path)
+        if validTuneDocument(data, vehId) then
+            table.insert(tuneFiles, {
+                id = name,
+                file = path,
+                label = name:gsub("%.json$", ""),
+                readOnly = false,
             })
+            table.insert(validIndex, name)
         end
     end
-    table.insert(presetFiles, {
-        file = STOCK_FILE,
-        label = "Vanilla (stock.json)",
-        readOnly = true,
-        vanilla = true,
-    })
+    state.tuneIndex = validIndex
+    return tuneFiles
+end
+
+local function findTune(tuneId)
+    for _, tune in ipairs(tuneFiles) do
+        if tune.id:lower() == tostring(tuneId):lower() then return tune end
+    end
+    return nil
 end
 
 local function getRecord(vehId)
@@ -1427,41 +1468,32 @@ end
 
 local function captureVehicleStock(veh)
     if not veh then return nil end
+    if stock[veh.id] and next(stock[veh.id]) then return stock[veh.id] end
     local _, liveParams = firstReadableId(veh)
     if not liveParams then return nil end
-
-    local changed = false
-    stock[veh.id] = stock[veh.id] or {}
-    runtimeStock[veh.id] = runtimeStock[veh.id] or {}
-    for key, value in pairs(liveParams) do
-        if stock[veh.id][key] == nil then
-            stock[veh.id][key] = value
-            runtimeStock[veh.id][key] = value
-            changed = true
-        end
-    end
-    if changed then persistRuntimeStock() end
+    stock[veh.id] = copyTbl(liveParams)
     return stock[veh.id]
 end
 
-local function selectVehicle(index)
-    if index < 1 or index > #VEHICLES then return end
-    selected = index
-    local veh = VEHICLES[selected]
-    if not stock[veh.id] then captureVehicleStock(veh) end
-    if stock[veh.id] then
-        loadEditorFrom(mergedPresetParams(veh.id))
-    else
-        edit = {}
-        lastError = "Could not read TweakDB record for " .. veh.name
+local function captureSessionStock()
+    stock = {}
+    local count = 0
+    for _, veh in ipairs(VEHICLES) do
+        if captureVehicleStock(veh) then
+            count = count + 1
+        else
+            print("[UltimateVehicleTuning] No live Vanilla baseline for " .. veh.id)
+        end
     end
+    print("[UltimateVehicleTuning] Captured live Vanilla baseline for " .. count .. " vehicles.")
+    return count
 end
 
 local function applyCurrent(reason)
     local veh = currentVeh()
     if not veh then return end
-    if activeConfigReadOnly then
-        configStatus = "Read-only baseline. Use Save As before editing."
+    if activeTuneReadOnly then
+        configStatus = "Read-only tune. Use Save As before editing."
         return
     end
     appliedList = {}
@@ -1470,15 +1502,14 @@ local function applyCurrent(reason)
     if ok then
         saved[veh.id] = copyTbl(edit)
         presetDirty = not tablesEqual(saved, diskSaved)
-        countSavedVehicles()
         if autoSave then
-            local savedOk, saveErr = persistActiveConfig()
+            local savedOk, saveErr = persistActiveTune()
             if not savedOk then
                 lastError = tostring(saveErr)
                 configStatus = "Auto-save failed: " .. lastError
             end
         else
-            configStatus = "Unsaved changes in " .. activeConfigFile
+            configStatus = "Unsaved changes in " .. activeTuneId
         end
         statusMessage = (reason or "Applied") .. " " .. veh.name ..
             ". Exit and re-enter the vehicle to load changed physics."
@@ -1490,225 +1521,261 @@ local function applyCurrent(reason)
     end
 end
 
-local function applyGroupToAll(groupName)
-    if activeConfigReadOnly then
-        configStatus = "Read-only baseline. Use Save As before editing."
-        return
-    end
-    local base = currentStock()
-    if not next(base) then
-        lastError = "No stock values captured yet for the selected vehicle."
-        return
-    end
-
-    local directValues = {}
-    for _, def in ipairs(PARAMS) do
-        if def.group == groupName then
-            local e = edit[def.key]
-            if e ~= nil then directValues[def.key] = e end
-        end
-    end
-
-    appliedList = {}
-    lastError = ""
-    local count = 0
-    for _, other in ipairs(VEHICLES) do
-        local otherStock = stock[other.id]
-        if otherStock and next(otherStock) then
-            local sectionParams = {}
-            for key, value in pairs(directValues) do
-                if otherStock[key] ~= nil then
-                    sectionParams[key] = value
-                end
-            end
-
-            if next(sectionParams) then
-                local ok = applyToVariants(other, sectionParams)
-                if ok then
-                    local merged = copyTbl(otherStock)
-                    for key, value in pairs(saved[other.id] or {}) do
-                        merged[key] = value
-                    end
-                    for key, value in pairs(sectionParams) do
-                        merged[key] = value
-                    end
-                    saved[other.id] = merged
-                    count = count + 1
-                end
-            end
-        end
-    end
-
-    presetDirty = not tablesEqual(saved, diskSaved)
-    countSavedVehicles()
-    if autoSave then
-        local ok, err = persistActiveConfig()
-        if not ok then
-            lastError = tostring(err)
-            configStatus = "Auto-save failed: " .. lastError
-        end
-    else
-        configStatus = "Unsaved changes in " .. activeConfigFile
-    end
-    statusMessage = "Applied " .. groupName .. " values to " .. count ..
-        " vehicles. Exit and re-enter a vehicle to load changed physics."
-end
-
-local function captureMissingStock()
-    local changed = false
-    for _, veh in ipairs(VEHICLES) do
-        local _, liveParams = firstReadableId(veh)
-        if liveParams then
-            if not stock[veh.id] then stock[veh.id] = {} end
-            if not runtimeStock[veh.id] then runtimeStock[veh.id] = {} end
-            for key, value in pairs(liveParams) do
-                if stock[veh.id][key] == nil then
-                    stock[veh.id][key] = value
-                    runtimeStock[veh.id][key] = value
-                    changed = true
-                end
-            end
-        end
-    end
-    if changed then persistRuntimeStock() end
-end
-
-local function applyPresetState()
+local function applySelectedTunes()
     appliedList = {}
     local count = 0
     local errors = 0
     for _, veh in ipairs(VEHICLES) do
-        local params = mergedPresetParams(veh.id)
+        local state = vehicleMetadata(veh.id)
+        refreshTuneFiles(veh.id)
+        local tune = findTune(state.activeTune)
+        if not tune then
+            state.activeTune = findTune(MODDED_DEFAULT_TUNE) and MODDED_DEFAULT_TUNE or VANILLA_TUNE
+            tune = findTune(state.activeTune)
+        end
+        local values = {}
+        if tune and not tune.vanilla and type(tune.file) == "string" then
+            local document = loadJSON(tune.file)
+            local documentValues = type(document) == "table" and document.values or nil
+            local documentVehicleId = type(document) == "table" and document.vehicleId or nil
+            if type(documentValues) == "table" and documentVehicleId == veh.id then
+                values = copyTbl(documentValues)
+            end
+        end
+        local params = copyTbl(stock[veh.id] or {})
+        for key, value in pairs(values) do params[key] = value end
         if next(params) then
             local ok, err = applyToVariants(veh, params)
             if ok then
-                if saved[veh.id] then count = count + 1 end
+                count = count + 1
             else
                 errors = errors + 1
                 lastError = tostring(err)
             end
         end
     end
-    countSavedVehicles()
-    statusMessage = "Loaded " .. activeConfigFile .. " (" .. vehicleCount .. " edited vehicles)."
-    print("[VPC] Applied preset " .. activeConfigFile .. ": " .. count ..
-        " configured vehicles, " .. errors .. " errors")
+    persistMetadata()
+    statusMessage = "Applied selected tunes to " .. count .. " vehicles."
+    print("[UltimateVehicleTuning] Applied per-vehicle tunes: " .. count ..
+        " vehicles, " .. errors .. " errors")
 end
 
-local function findPreset(file)
-    for _, preset in ipairs(presetFiles) do
-        if preset.file:lower() == tostring(file):lower() then return preset end
-    end
-    return nil
-end
+local function initializeTuneStorage(baseDocument)
+    local baseVehicles = validPresetDocument(baseDocument) and copyVehicleMap(baseDocument.vehicles) or {}
+    migrateLegacyKeys(baseVehicles)
+    migrateParamKeys(baseVehicles)
+    addPresetVehiclesToRoster(baseVehicles)
 
-local function selectedIndexForId(vehId)
-    if not vehId then return selected end
-    for index, veh in ipairs(VEHICLES) do
-        if veh.id == vehId then return index end
-    end
-    return selected
-end
+    local cleanSlate = metadata.version ~= 2 or type(metadata.vehicles) ~= "table"
+    local priorAutoSave = type(metadata.autoSave) == "boolean" and metadata.autoSave or true
+    if cleanSlate then metadata = { version = 2, autoSave = priorAutoSave, vehicles = {} } end
+    metadata.autoSave = priorAutoSave
+    autoSave = priorAutoSave
 
-local function loadPreset(file, discardDirty)
-    if activeConfigDirty() and not discardDirty then
-        if autoSave and not activeConfigReadOnly then
-            local ok, err = persistActiveConfig()
-            if not ok then
-                configStatus = "Could not save before switching: " .. tostring(err)
-                return false
+    for _, veh in ipairs(VEHICLES) do
+        local values = baseVehicles[veh.id]
+        local hasDefault = false
+        if values and ensureVehicleTuneDirectory(veh.id) then
+            local tuneDir = vehicleTuneDir(veh.id)
+            if tuneDir then
+                local path = tuneDir .. "/" .. MODDED_DEFAULT_TUNE .. ".json"
+                local document = { version = 1, vehicleId = veh.id, values = values }
+                local existing = loadJSON(path)
+                local existingValues = type(existing) == "table" and existing.values or nil
+                if not validTuneDocument(existing, veh.id) or
+                    type(existingValues) ~= "table" or not tablesEqual(existingValues, values) then
+                    saveJSON(path, document)
+                end
+                hasDefault = validTuneDocument(loadJSON(path), veh.id)
             end
-        else
-            configStatus = "Unsaved changes: Save or Discard before switching presets."
-            return false
+        end
+        local state = vehicleMetadata(veh.id)
+        if cleanSlate then
+            state.activeTune = hasDefault and MODDED_DEFAULT_TUNE or VANILLA_TUNE
+            state.tuneIndex = {}
+        elseif state.activeTune == MODDED_DEFAULT_TUNE and not hasDefault then
+            state.activeTune = VANILLA_TUNE
         end
     end
+    persistMetadata()
+    return cleanSlate
+end
 
-    local preset = findPreset(file)
-    if not preset then
-        refreshPresetFiles()
-        preset = findPreset(file)
+local function prepareContextSwitch(discardDirty)
+    if not activeTuneDirty() or discardDirty then return true end
+    if autoSave and not activeTuneReadOnly then
+        local ok, err = persistActiveTune()
+        if ok then return true end
+        configStatus = "Could not save before switching: " .. tostring(err)
+        return false
     end
-    if not preset then
-        configStatus = "Preset not found or invalid: " .. tostring(file)
+    configStatus = "Unsaved changes: Save or Discard before switching vehicle or tune."
+    return false
+end
+
+local function loadVehicleTune(index, tuneId, discardDirty, applyLive)
+    if index < 1 or index > #VEHICLES then return false end
+    if not prepareContextSwitch(discardDirty) then return false end
+
+    selected = index
+    local veh = currentVeh()
+    if not captureVehicleStock(veh) then
+        edit = {}
+        lastError = "Could not read live TweakDB record for " .. veh.name
         return false
     end
 
-    local document
-    if preset.vanilla then
-        document = { selectedId = currentVeh() and currentVeh().id or nil, vehicles = {} }
-    else
-        document = loadJSON(preset.file)
-        if not validPresetDocument(document) then
-            configStatus = "Invalid preset: " .. preset.file
+    refreshTuneFiles(veh.id)
+    local state = vehicleMetadata(veh.id)
+    local tune = findTune(tuneId or state.activeTune)
+    if not tune then
+        tune = findTune(MODDED_DEFAULT_TUNE) or findTune(VANILLA_TUNE)
+    end
+    if not tune then return false end
+
+    local values = {}
+    if not tune.vanilla and type(tune.file) == "string" then
+        local document = loadJSON(tune.file)
+        if not validTuneDocument(document, veh.id) then
+            configStatus = "Invalid tune file for " .. veh.name
+            return false
+        end
+        local documentValues = type(document) == "table" and document.values or nil
+        if type(documentValues) ~= "table" then return false end
+        values = copyTbl(documentValues)
+    end
+
+    activeTuneId = tune.id
+    activeTunePath = tune.file
+    activeTuneReadOnly = tune.readOnly
+    state.activeTune = tune.id
+    saved = { [veh.id] = values }
+    diskSaved = copyVehicleMap(saved)
+    presetDirty = false
+    loadEditorFrom(mergedPresetParams(veh.id, saved))
+
+    if applyLive then
+        local ok, err = applyToVariants(veh, edit)
+        if not ok then
+            lastError = tostring(err or "Apply failed")
+            configStatus = "Could not apply " .. tune.label
             return false
         end
     end
-
-    local loadedVehicles = copyVehicleMap(document and document.vehicles or {})
-    migrateLegacyKeys(loadedVehicles)
-    migrateParamKeys(loadedVehicles)
-    addPresetVehiclesToRoster(loadedVehicles)
-    captureMissingStock()
-
-    activeConfigFile = preset.file
-    activeConfigReadOnly = preset.readOnly
-    saved = loadedVehicles
-    diskSaved = copyVehicleMap(loadedVehicles)
-    presetDirty = false
-    selected = selectedIndexForId(document and document.selectedId or nil)
-    countSavedVehicles()
-    applyPresetState()
-    selectVehicle(selected)
-    configStatus = "Loaded " .. preset.label .. (preset.readOnly and " (read-only)" or "")
+    configStatus = "Loaded " .. tune.label .. (tune.readOnly and " (read-only)" or "")
     persistMetadata()
     return true
 end
 
+local function selectVehicle(index)
+    local state = VEHICLES[index] and vehicleMetadata(VEHICLES[index].id) or nil
+    return state and loadVehicleTune(index, state.activeTune, false, false) or false
+end
+
+local function loadTune(tuneId, discardDirty)
+    return loadVehicleTune(selected, tuneId, discardDirty, true)
+end
+
 local function discardActiveChanges()
-    return loadPreset(activeConfigFile, true)
+    return loadTune(activeTuneId, true)
 end
 
-local function normalizedSaveAsFilename(raw)
-    if type(raw) ~= "string" then return nil end
-    local name = raw:match("^%s*(.-)%s*$")
-    if name == "" or name:find("..", 1, true) or
-        name:find("/", 1, true) or name:find("\\", 1, true) then return nil end
-    if not name:lower():match("%.json$") then name = name .. ".json" end
-    if not name:lower():match("^config") then name = "config_" .. name end
-    return safeConfigFilename(name)
-end
-
-local function saveAsPreset(rawName)
-    local filename = normalizedSaveAsFilename(rawName)
-    if not filename then
-        configStatus = "Use a simple config name without folders or '..'."
+local function saveAsTune(rawName)
+    local veh = currentVeh()
+    local filename = safeTuneFilename(rawName)
+    if not veh or not filename then
+        configStatus = "Use a simple tune name without folders or '..'."
         return false
     end
-    if filename:lower() == BASE_CONFIG_FILE or filename:lower() == STOCK_FILE then
-        configStatus = "That filename is reserved for a read-only baseline."
+    if not ensureVehicleTuneDirectory(veh.id) then
+        configStatus = "Could not create the tune folder for " .. veh.name
         return false
     end
-    if fileExists(filename) then
+    local path = vehicleTuneDir(veh.id) .. "/" .. filename
+    if fileExists(path) then
         configStatus = filename .. " already exists. Select it and use Save."
         return false
     end
 
-    local previousFile = activeConfigFile
-    local previousReadOnly = activeConfigReadOnly
-    activeConfigFile = filename
-    activeConfigReadOnly = false
-    local ok, err = persistActiveConfig()
+    local ok, err = saveJSON(path, {
+        version = 1,
+        vehicleId = veh.id,
+        values = copyTbl(edit),
+    })
     if not ok then
-        activeConfigFile = previousFile
-        activeConfigReadOnly = previousReadOnly
         configStatus = "Save As failed: " .. tostring(err)
         return false
     end
-    refreshPresetFiles()
+
+    local state = vehicleMetadata(veh.id)
+    table.insert(state.tuneIndex, filename)
+    state.activeTune = filename
+    refreshTuneFiles(veh.id)
+    return loadTune(filename, true)
+end
+
+local function deleteActiveTune()
+    local veh = currentVeh()
+    if not veh or activeTuneReadOnly or not activeTunePath then
+        configStatus = "Vanilla and Modded default cannot be deleted."
+        return false
+    end
+
+    local filename = safeTuneFilename(activeTuneId)
+    local tuneDir = vehicleTuneDir(veh.id)
+    if not filename or not tuneDir then
+        configStatus = "Delete failed: invalid tune path."
+        return false
+    end
+    local expectedPath = tuneDir .. "/" .. filename
+    if activeTunePath:lower() ~= expectedPath:lower() then
+        configStatus = "Delete failed: tune path is outside this vehicle's folder."
+        return false
+    end
+
+    local callOk, removed, removeErr = pcall(function() return os.remove(expectedPath) end)
+    if not callOk or not removed then
+        configStatus = "Delete failed: " .. tostring(removeErr or removed or "could not remove file")
+        return false
+    end
+
+    local state = vehicleMetadata(veh.id)
+    local kept = {}
+    for _, indexedName in ipairs(state.tuneIndex) do
+        if tostring(indexedName):lower() ~= filename:lower() then
+            table.insert(kept, indexedName)
+        end
+    end
+    state.tuneIndex = kept
+    refreshTuneFiles(veh.id)
+    local fallback = findTune(MODDED_DEFAULT_TUNE) and MODDED_DEFAULT_TUNE or VANILLA_TUNE
+    state.activeTune = fallback
     persistMetadata()
-    configStatus = "Created and selected " .. filename
-    return true
+
+    local loaded = loadVehicleTune(selected, fallback, true, true)
+    if loaded then configStatus = "Deleted " .. filename .. " and loaded " .. fallback .. "." end
+    return loaded
+end
+
+local function restoreSessionStock()
+    local count, errors = 0, 0
+    for _, veh in ipairs(VEHICLES) do
+        local params = stock[veh.id]
+        if params and next(params) then
+            local ok, err = applyToVariants(veh, params)
+            if ok then
+                count = count + 1
+            else
+                errors = errors + 1
+                print("[UltimateVehicleTuning] Baseline restore failed for " ..
+                    veh.id .. ": " .. tostring(err))
+            end
+        else
+            print("[UltimateVehicleTuning] Skipped baseline restore without a capture: " .. veh.id)
+        end
+    end
+    print("[UltimateVehicleTuning] Restored session baseline for " .. count ..
+        " vehicles before shutdown (" .. errors .. " errors).")
 end
 
 local function normalizeRecordName(raw)
@@ -1832,8 +1899,14 @@ local function selectMounted(silent)
         return false
     end
 
-    local function selectMatch(index, veh)
-        selectVehicle(index)
+    local function selectMatch(index, veh, applyLive)
+        local ok
+        if applyLive then
+            ok = loadVehicleTune(index, vehicleMetadata(veh.id).activeTune, false, true)
+        else
+            ok = selectVehicle(index)
+        end
+        if not ok then return false end
         statusMessage = "Selected " .. veh.name .. " from your current vehicle."
         return true
     end
@@ -1869,7 +1942,7 @@ local function selectMounted(silent)
     if params and next(params) then
         table.insert(VEHICLES, mountedVehicle)
         captureVehicleStock(mountedVehicle)
-        return selectMatch(#VEHICLES, mountedVehicle)
+        return selectMatch(#VEHICLES, mountedVehicle, true)
     end
 
     if not silent then statusMessage = "Mounted vehicle is not in the list: " .. mounted end
@@ -1930,7 +2003,7 @@ local function drawGroup(groupName)
     local textW = ImGui.CalcTextSize("Reset")
     local resetW = textW + padX * 2
     local sliderW = math.max(40, width * 0.5 - gap - resetW)
-    if activeConfigReadOnly then ImGui.BeginDisabled() end
+    if activeTuneReadOnly then ImGui.BeginDisabled() end
 
     for _, def in ipairs(PARAMS) do
         if def.group == groupName then
@@ -1985,16 +2058,7 @@ local function drawGroup(groupName)
         end
     end
 
-    if groupName == "SPEED-SENSITIVE STEERING" then
-        ImGui.Spacing()
-        -- if ImGui.Button("APPLY THIS SECTION TO ALL VEHICLES###apply_all_" .. groupName, width, 28) then
-        --     applyGroupToAll(groupName)
-        -- end
-        if ImGui.IsItemHovered() then
-            ImGui.SetTooltip("Copy this section's exact absolute values; other tuned sections are preserved.")
-        end
-    end
-    if activeConfigReadOnly then ImGui.EndDisabled() end
+    if activeTuneReadOnly then ImGui.EndDisabled() end
 end
 
 local function pushWindowStyle()
@@ -2019,32 +2083,32 @@ local function popWindowStyle()
     ImGui.PopStyleColor(12)
 end
 
-local function drawConfigPanel()
-    ImGui.TextDisabled("CONFIG")
+local function drawTunePanel()
+    ImGui.TextDisabled("TUNE")
     ImGui.SetNextItemWidth(ImGui.GetWindowContentRegionWidth())
-    local activePreset = findPreset(activeConfigFile)
-    local presetLabel = activePreset and activePreset.label or activeConfigFile
-    if activeConfigReadOnly then presetLabel = presetLabel .. " [READ ONLY]" end
-    if ImGui.BeginCombo("##active_config", presetLabel, ImGuiComboFlags.HeightLargest) then
-        for _, preset in ipairs(presetFiles) do
-            local isActive = preset.file:lower() == activeConfigFile:lower()
-            local label = (isActive and "> " or "") .. preset.label ..
-                (preset.readOnly and " [READ ONLY]" or "")
+    local activeTune = findTune(activeTuneId)
+    local tuneLabel = activeTune and activeTune.label or activeTuneId
+    if activeTuneReadOnly then tuneLabel = tuneLabel .. " [READ ONLY]" end
+    if ImGui.BeginCombo("##active_tune", tuneLabel, ImGuiComboFlags.HeightLargest) then
+        for _, tune in ipairs(tuneFiles) do
+            local isActive = tune.id:lower() == activeTuneId:lower()
+            local label = (isActive and "> " or "") .. tune.label ..
+                (tune.readOnly and " [READ ONLY]" or "")
             if ImGui.Selectable(label, false) and not isActive then
-                loadPreset(preset.file, false)
+                loadTune(tune.id, false)
             end
         end
         ImGui.EndCombo()
     end
 
-    if activeConfigReadOnly then ImGui.BeginDisabled() end
+    if activeTuneReadOnly then ImGui.BeginDisabled() end
     if ImGui.Button("Save", 100, 0) then
-        local ok, err = persistActiveConfig()
+        local ok, err = persistActiveTune()
         if not ok then configStatus = tostring(err) end
     end
-    if activeConfigReadOnly then ImGui.EndDisabled() end
+    if activeTuneReadOnly then ImGui.EndDisabled() end
     ImGui.SameLine()
-    local wasDirty = activeConfigDirty()
+    local wasDirty = activeTuneDirty()
     if not wasDirty then ImGui.BeginDisabled() end
     if ImGui.Button("Discard", 100, 0) then discardActiveChanges() end
     if not wasDirty then ImGui.EndDisabled() end
@@ -2052,8 +2116,8 @@ local function drawConfigPanel()
     local autoValue, autoChanged = ImGui.Checkbox("Auto-save", autoSave)
     if autoChanged then
         autoSave = autoValue
-        if autoSave and activeConfigDirty() and not activeConfigReadOnly then
-            local ok, err = persistActiveConfig()
+        if autoSave and activeTuneDirty() and not activeTuneReadOnly then
+            local ok, err = persistActiveTune()
             if not ok then configStatus = tostring(err) end
         else
             persistMetadata()
@@ -2064,13 +2128,40 @@ local function drawConfigPanel()
     ImGui.SetNextItemWidth(ImGui.GetWindowContentRegionWidth() - 115)
     saveAsName = ImGui.InputText("##save_as_name", saveAsName, 96)
     ImGui.SameLine()
-    if ImGui.Button("Save As", 105, 0) then saveAsPreset(saveAsName) end
+    if ImGui.Button("Save As", 105, 0) then saveAsTune(saveAsName) end
 
-    if activeConfigReadOnly then
+    if activeTuneReadOnly then ImGui.BeginDisabled() end
+    if ImGui.Button("Delete saved tune", 150, 0) then
+        pendingDeleteTuneId = activeTuneId
+        ImGui.OpenPopup("Delete saved tune?###delete_tune_confirmation")
+    end
+    if activeTuneReadOnly then ImGui.EndDisabled() end
+
+    if ImGui.BeginPopup("Delete saved tune?###delete_tune_confirmation") then
+        ImGui.TextWrapped("Permanently delete \"" .. tostring(pendingDeleteTuneId) ..
+            "\" for " .. tostring(currentVeh() and currentVeh().name or "this vehicle") .. "?")
+        if activeTuneDirty() then
+            ImGui.TextWrapped("Any unsaved changes in this tune will also be discarded.")
+        end
+        ImGui.Separator()
+        if ImGui.Button("Delete permanently", 145, 0) then
+            if pendingDeleteTuneId == activeTuneId then deleteActiveTune() end
+            pendingDeleteTuneId = nil
+            ImGui.CloseCurrentPopup()
+        end
+        ImGui.SameLine()
+        if ImGui.Button("Cancel", 90, 0) then
+            pendingDeleteTuneId = nil
+            ImGui.CloseCurrentPopup()
+        end
+        ImGui.EndPopup()
+    end
+
+    if activeTuneReadOnly then
         ImGui.PushStyleColor(ImGuiCol.Text, 0.55, 0.75, 1.0, 1.0)
-        ImGui.Text("READ ONLY: use Save As to create an editable preset.")
+        ImGui.Text("READ ONLY: use Save As to create an editable tune.")
         ImGui.PopStyleColor()
-    elseif activeConfigDirty() then
+    elseif activeTuneDirty() then
         ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.67, 0.15, 1.0)
         ImGui.Text("UNSAVED CHANGES")
         ImGui.PopStyleColor()
@@ -2079,9 +2170,9 @@ local function drawConfigPanel()
         ImGui.Text("SAVED")
         ImGui.PopStyleColor()
     end
-    ImGui.Text("Vehicles edited in this preset: " .. tostring(vehicleCount))
+    ImGui.Text("Parameters differing from Vanilla: " .. tostring(countEditedParameters()))
     ImGui.TextWrapped(configStatus)
-    ImGui.TextDisabled("* green = differs from vanilla    ! amber = not saved to this preset")
+    ImGui.TextDisabled("* green = differs from Vanilla    ! amber = not saved to this tune")
 end
 
 local function drawVehiclePanel()
@@ -2116,10 +2207,10 @@ local function drawVehiclePanel()
     ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.78, 0.20, 1.0)
     ImGui.TextWrapped("Exit and get back into the vehicle to load changed physics. Recycle is an optional shortcut after exiting.")
     ImGui.PopStyleColor()
-    if veh and saved[veh.id] then
-        ImGui.Text("Preset contains values for " .. veh.name .. ".")
+    if veh and activeTuneId == VANILLA_TUNE then
+        ImGui.Text("This vehicle currently uses the live Vanilla baseline.")
     elseif veh then
-        ImGui.Text("This vehicle currently uses the selected baseline.")
+        ImGui.Text("Active tune applies only to " .. veh.name .. ".")
     end
     ImGui.TextWrapped(statusMessage)
 end
@@ -2133,9 +2224,9 @@ local function drawUI()
             ImGui.TextWrapped("Waiting for TweakDB... reload CET mods after the session has started.")
         else
             ImGui.Separator()
-            drawConfigPanel()
-            ImGui.Separator()
             drawVehiclePanel()
+            ImGui.Separator()
+            drawTunePanel()
 
             if lastError ~= "" then
                 ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.25, 0.15, 1.0)
@@ -2187,62 +2278,25 @@ end
 registerForEvent("onInit", function()
     discoverOfficialVehicles()
 
-    vanillaStock = loadJSON(STOCK_FILE) or {}
-    runtimeStock = loadJSON(RUNTIME_STOCK_FILE) or {}
-    migrateLegacyKeys(vanillaStock)
-    migrateLegacyKeys(runtimeStock)
-    migrateParamKeys(vanillaStock)
-    migrateParamKeys(runtimeStock)
-    stock = copyVehicleMap(vanillaStock)
-    for vehId, params in pairs(runtimeStock) do
-        stock[vehId] = stock[vehId] or {}
-        for key, value in pairs(params) do
-            if stock[vehId][key] == nil then stock[vehId][key] = value end
-        end
-    end
-    addPresetVehiclesToRoster(runtimeStock)
-
     local loadedMetadata = loadJSON(METADATA_FILE)
     if type(loadedMetadata) == "table" then
         metadata = loadedMetadata
-        if type(metadata.autoSave) == "boolean" then autoSave = metadata.autoSave end
-        if type(metadata.activeConfig) == "string" then
-            activeConfigFile = metadata.activeConfig
-        end
-        if type(metadata.presetIndex) ~= "table" then metadata.presetIndex = {} end
     end
-
-    if not fileExists(DEFAULT_CONFIG_FILE) then
-        saveJSON(DEFAULT_CONFIG_FILE, {
-            selectedId = VEHICLES[selected] and VEHICLES[selected].id or nil,
-            vehicles = {},
-        })
-    end
-
-    refreshPresetFiles()
-    if not findPreset(activeConfigFile) then
-        activeConfigFile = DEFAULT_CONFIG_FILE
-        if not findPreset(activeConfigFile) then
-            activeConfigFile = BASE_CONFIG_FILE
-        end
-        if not findPreset(activeConfigFile) then
-            activeConfigFile = STOCK_FILE
-        end
-    end
-
-    if not loadPreset(activeConfigFile, true) then
-        saved = {}
-        diskSaved = {}
-        activeConfigFile = STOCK_FILE
-        activeConfigReadOnly = true
-        captureMissingStock()
-        applyPresetState()
-        selectVehicle(selected)
-        configStatus = "Loaded vanilla fallback (read-only)"
-    end
+    local baseDocument = loadJSON(BASE_CONFIG_FILE)
+    local cleanSlate = initializeTuneStorage(baseDocument)
+    captureSessionStock()
+    applySelectedTunes()
+    loadVehicleTune(selected, vehicleMetadata(VEHICLES[selected].id).activeTune, true, false)
 
     tdbReady = true
+    if cleanSlate then
+        configStatus = "Created per-vehicle Modded default tunes from config_base.json."
+    end
     print("[UltimateVehicleTuning] CET UI ready. Open the overlay to tune vehicles.")
+end)
+
+registerForEvent("onShutdown", function()
+    if tdbReady and next(stock) then restoreSessionStock() end
 end)
 
 registerForEvent("onOverlayOpen", function()
