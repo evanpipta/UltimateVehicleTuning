@@ -673,7 +673,7 @@ local TUNES_ROOT = "tunes"
 local VANILLA_TUNE = "vanilla"
 local MODDED_DEFAULT_TUNE = "modded_default"
 -- Authoring switch: allow Modded default tunes to be edited and saved in-game.
-local MODDED_DEFAULT_EDITABLE = false
+local MODDED_DEFAULT_EDITABLE = true
 local BASE_CONFIG_FILE = "config_base.json"
 local METADATA_FILE = "metadata.json"
 
@@ -1943,6 +1943,11 @@ local function mountedRecordName()
     return nil
 end
 
+local function vehicleTypeForRecord(recordName)
+    local id = tostring(recordName or ""):lower()
+    return (id:find("v_sportbike", 1, true) or id:find("_bike", 1, true)) and "Bike" or "Car"
+end
+
 local function recycleLastVehicle()
     if pendingRespawn then
         statusMessage = "A vehicle recycle is already in progress."
@@ -1962,8 +1967,6 @@ local function recycleLastVehicle()
         return
     end
 
-    local isBike = recordName:lower():find("v_sportbike", 1, true) ~= nil
-    local vehicleType = isBike and "Bike" or "Car"
     local ok, err = pcall(function()
         local garageID = GetSingleton("vehicleGarageVehicleID"):Resolve(recordName)
         if not garageID then error("Could not resolve GarageVehicleID") end
@@ -1980,11 +1983,42 @@ local function recycleLastVehicle()
     pendingRespawn = {
         delay = 1.25,
         recordName = recordName,
-        vehicleType = vehicleType,
+        vehicleType = vehicleTypeForRecord(recordName),
         attempts = 0,
+        selectedSpawn = false,
     }
     lastError = ""
     statusMessage = "Despawn requested; waiting to respawn " .. recordName .. "..."
+end
+
+local function spawnSelectedVehicle()
+    if pendingRespawn then
+        statusMessage = "A vehicle spawn or recycle is already in progress."
+        return
+    end
+
+    local veh = currentVeh()
+    if not veh or not getRecord(veh.id) then
+        statusMessage = "The selected vehicle does not have a valid spawn record."
+        return
+    end
+
+    local applied, applyErr = applyToVariants(veh, edit)
+    if not applied then
+        lastError = "Could not apply the selected tune before spawning: " .. tostring(applyErr)
+        statusMessage = "Could not prepare the selected vehicle for spawning."
+        return
+    end
+
+    pendingRespawn = {
+        delay = 0,
+        recordName = veh.id,
+        vehicleType = vehicleTypeForRecord(veh.id),
+        attempts = 0,
+        selectedSpawn = true,
+    }
+    lastError = ""
+    statusMessage = "Requesting selected vehicle: " .. veh.name .. "..."
 end
 
 local function updatePendingRespawn(deltaTime)
@@ -2004,15 +2038,23 @@ local function updatePendingRespawn(deltaTime)
 
     if ok and spawnedOrErr ~= false then
         pendingRespawn = nil
-        statusMessage = "Respawn requested for " .. request.recordName .. "."
-        print("[VPC] Recycled " .. request.recordName)
+        if request.selectedSpawn then
+            statusMessage = "Spawn requested for selected vehicle: " .. request.recordName .. "."
+            print("[VPC] Spawned selected vehicle " .. request.recordName)
+        else
+            statusMessage = "Respawn requested for " .. request.recordName .. "."
+            print("[VPC] Recycled " .. request.recordName)
+        end
     elseif request.attempts < 3 then
         request.delay = 0.75
-        statusMessage = "Respawn not ready; retrying (" .. request.attempts .. "/3)..."
+        statusMessage = "Vehicle spawn not ready; retrying (" .. request.attempts .. "/3)..."
     else
         pendingRespawn = nil
-        lastError = "Recycle respawn failed: " .. tostring(spawnedOrErr)
-        statusMessage = "Automatic respawn failed. Use the normal vehicle summon."
+        lastError = (request.selectedSpawn and "Selected vehicle spawn failed: " or
+            "Recycle respawn failed: ") .. tostring(spawnedOrErr)
+        statusMessage = request.selectedSpawn and
+            "Could not spawn the selected vehicle." or
+            "Automatic respawn failed. Use the normal vehicle summon."
         print("[VPC] " .. lastError)
     end
 end
@@ -2421,6 +2463,12 @@ local function drawTunePanel()
     if pendingRespawn then ImGui.BeginDisabled() end
     if ImGui.Button("Respawn Last Vehicle", 200, 0) then
         recycleLastVehicle()
+    end
+    if pendingRespawn then ImGui.EndDisabled() end
+    ImGui.SameLine()
+    if pendingRespawn then ImGui.BeginDisabled() end
+    if ImGui.Button("Spawn Selected Vehicle", 200, 0) then
+        spawnSelectedVehicle()
     end
     if pendingRespawn then ImGui.EndDisabled() end
 
