@@ -673,7 +673,7 @@ local TUNES_ROOT = "tunes"
 local VANILLA_TUNE = "vanilla"
 local MODDED_DEFAULT_TUNE = "modded_default"
 -- Authoring switch: allow Modded default tunes to be edited and saved in-game.
-local MODDED_DEFAULT_EDITABLE = true
+local MODDED_DEFAULT_EDITABLE = false
 local BASE_CONFIG_FILE = "config_base.json"
 local METADATA_FILE = "metadata.json"
 
