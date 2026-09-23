@@ -674,8 +674,6 @@ local VANILLA_TUNE = "vanilla"
 local MODDED_DEFAULT_TUNE = "modded_default"
 -- Authoring switch: allow Modded default tunes to be edited and saved in-game.
 local MODDED_DEFAULT_EDITABLE = true
--- Authoring switch: retarget vanilla default CurveSets to the packed UVT copies.
-local USE_CUSTOM_CURVESETS = true
 local BASE_CONFIG_FILE = "config_base.json"
 local METADATA_FILE = "metadata.json"
 
@@ -1646,117 +1644,7 @@ local function applyCurrent(reason)
     end
 end
 
-local CUSTOM_BIKE_VEH_CURVES =
-    "ultimate_vehicle_tuning\\gameplay\\vehicles\\curves\\uvt_bike.vehcurveset"
-local CUSTOM_CAR_VEH_CURVES =
-    "ultimate_vehicle_tuning\\gameplay\\vehicles\\curves\\uvt_car.vehcurveset"
-local CUSTOM_BIKE_LEAN_CURVES =
-    "ultimate_vehicle_tuning\\gameplay\\vehicles\\curves\\uvt_bike.bikecurveset"
-local customCurveSetsApplied = false
-
-local function tweakRecords(typeName)
-    local ok, records = pcall(function()
-        return TweakDB:GetRecords(typeName)
-    end)
-    if ok and type(records) == "table" then return records end
-    return {}
-end
-
-local function applyDefaultCurveSets()
-    if not USE_CUSTOM_CURVESETS then
-        print("[UltimateVehicleTuning] Custom CurveSets disabled; leaving vanilla references unchanged.")
-        return
-    end
-    if customCurveSetsApplied then return end
-
-    local stats = {
-        bikeWheel = { attempted = 0, changed = 0, verified = 0, failed = 0 },
-        carWheel = { attempted = 0, changed = 0, verified = 0, failed = 0 },
-        bikeLean = { attempted = 0, changed = 0, verified = 0, failed = 0 },
-    }
-    local expectedHashes = {}
-    local seen = {}
-    local function retarget(recordId, flatName, target, category)
-        if not recordId then return end
-        local recordKey = tostring(recordId) .. "." .. flatName
-        if seen[recordKey] then return end
-        seen[recordKey] = true
-        local flatId = TweakDBID.new(recordId, "." .. flatName)
-        local current = TweakDB:GetFlat(flatId)
-        if current == nil then return end
-
-        local stat = stats[category]
-        stat.attempted = stat.attempted + 1
-        local beforeHash = tostring(current)
-        local ok = pcall(function() TweakDB:SetFlat(flatId, target) end)
-        local after = ok and TweakDB:GetFlat(flatId) or nil
-        local afterHash = after ~= nil and tostring(after) or nil
-        if not ok or not afterHash then
-            stat.failed = stat.failed + 1
-            return
-        end
-        expectedHashes[target] = expectedHashes[target] or afterHash
-        if afterHash == expectedHashes[target] then
-            stat.verified = stat.verified + 1
-            if afterHash ~= beforeHash then stat.changed = stat.changed + 1 end
-        else
-            stat.failed = stat.failed + 1
-        end
-    end
-
-    for _, typeName in ipairs({ "gamedataVehicle_Record", "Vehicle" }) do
-        for _, rec in ipairs(tweakRecords(typeName)) do
-            local ok, recordId = pcall(function() return rec:GetID() end)
-            if ok then
-                local recordName = TDBID.ToStringDEBUG(recordId):lower()
-                local bikeOk, bikeDriveModel = pcall(function() return rec:BikeDriveModelData() end)
-                local isBike = (bikeOk and bikeDriveModel ~= nil) or
-                    recordName:find("sportbike", 1, true) ~= nil
-                if isBike then
-                    retarget(recordId, "curvesPath", CUSTOM_BIKE_VEH_CURVES, "bikeWheel")
-                else
-                    retarget(recordId, "curvesPath", CUSTOM_CAR_VEH_CURVES, "carWheel")
-                end
-            end
-        end
-    end
-    for _, typeName in ipairs({
-        "gamedataBikeDriveModelData_Record",
-        "gamedataVehicleDriveModelData_Record",
-        "BikeDriveModelData",
-        "VehicleDriveModelData",
-    }) do
-        for _, rec in ipairs(tweakRecords(typeName)) do
-            local ok, recordId = pcall(function() return rec:GetID() end)
-            if ok then
-                retarget(recordId, "bikeCurvesPath", CUSTOM_BIKE_LEAN_CURVES, "bikeLean")
-            end
-        end
-    end
-
-    local totalAttempted = 0
-    local totalVerified = 0
-    local totalFailed = 0
-    for _, entry in ipairs({
-        { "bike wheel", stats.bikeWheel },
-        { "car wheel", stats.carWheel },
-        { "bike lean", stats.bikeLean },
-    }) do
-        local label, stat = entry[1], entry[2]
-        totalAttempted = totalAttempted + stat.attempted
-        totalVerified = totalVerified + stat.verified
-        totalFailed = totalFailed + stat.failed
-        print("[UltimateVehicleTuning] CurveSet " .. label .. ": attempted " ..
-            stat.attempted .. ", changed " .. stat.changed .. ", verified " ..
-            stat.verified .. ", failed " .. stat.failed .. ".")
-    end
-    customCurveSetsApplied = totalAttempted > 0 and totalVerified == totalAttempted
-    print("[UltimateVehicleTuning] Custom CurveSet assignment: attempted " .. totalAttempted ..
-        ", verified " .. totalVerified .. ", failed " .. totalFailed .. ".")
-end
-
 local function applySelectedTunes()
-    applyDefaultCurveSets()
     appliedList = {}
     local count = 0
     local errors = 0
