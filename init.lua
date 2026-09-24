@@ -301,11 +301,12 @@ local PARAMS = {
 }
 
 for gear = 1, 8 do
-    table.insert(PARAMS, { key = "gear_" .. gear .. "_min_speed", group = "INDIVIDUAL GEARS", label = "Gear " .. gear .. " Minimum Speed", fmt = "%.1f m/s", absMin = -50, absMax = 300 })
-    table.insert(PARAMS, { key = "gear_" .. gear .. "_max_speed", group = "INDIVIDUAL GEARS", label = "Gear " .. gear .. " Maximum Speed", fmt = "%.1f m/s", absMin = 0, absMax = 400 })
-    table.insert(PARAMS, { key = "gear_" .. gear .. "_min_rpm", group = "INDIVIDUAL GEARS", label = "Gear " .. gear .. " Minimum RPM", fmt = "%.0f", absMin = 0, absMax = 20000 })
-    table.insert(PARAMS, { key = "gear_" .. gear .. "_max_rpm", group = "INDIVIDUAL GEARS", label = "Gear " .. gear .. " Maximum RPM", fmt = "%.0f", absMin = 0, absMax = 25000 })
-    table.insert(PARAMS, { key = "gear_" .. gear .. "_torque", group = "INDIVIDUAL GEARS", label = "Gear " .. gear .. " Torque Multiplier", fmt = "%.2f x", absMin = 0, absMax = 10 })
+    local gearLabel = gear == 1 and "Gear 1 (Reverse)" or ("Gear " .. gear)
+    table.insert(PARAMS, { key = "gear_" .. gear .. "_min_speed", group = "INDIVIDUAL GEARS", label = gearLabel .. " Minimum Speed", fmt = "%.1f m/s", absMin = -50, absMax = 300 })
+    table.insert(PARAMS, { key = "gear_" .. gear .. "_max_speed", group = "INDIVIDUAL GEARS", label = gearLabel .. " Maximum Speed", fmt = "%.1f m/s", absMin = 0, absMax = 400 })
+    table.insert(PARAMS, { key = "gear_" .. gear .. "_min_rpm", group = "INDIVIDUAL GEARS", label = gearLabel .. " Minimum RPM", fmt = "%.0f", absMin = 0, absMax = 20000 })
+    table.insert(PARAMS, { key = "gear_" .. gear .. "_max_rpm", group = "INDIVIDUAL GEARS", label = gearLabel .. " Maximum RPM", fmt = "%.0f", absMin = 0, absMax = 25000 })
+    table.insert(PARAMS, { key = "gear_" .. gear .. "_torque", group = "INDIVIDUAL GEARS", label = gearLabel .. " Torque Multiplier", fmt = "%.2f x", absMin = 0, absMax = 10 })
 end
 
 local GROUPS = {
