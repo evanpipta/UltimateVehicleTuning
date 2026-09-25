@@ -669,10 +669,13 @@ local metadata = { version = 2, autoSave = true, vehicles = {} }
 local gameSessionActive = false
 local loadingTunesApplied = false
 local loadingMountedTuneApplied = false
+local genericTrafficDefaults = {}
+local genericTrafficBaselines = {}
 
 local TUNES_ROOT = "tunes"
 local VANILLA_TUNE = "vanilla"
 local MODDED_DEFAULT_TUNE = "modded_default"
+local TRAFFIC_VEHICLE_LOG = "UltimateVehicleTuning_TrafficVehicles.log"
 -- Authoring switch: allow Modded default tunes to be edited and saved in-game.
 local MODDED_DEFAULT_EDITABLE = true
 local BASE_CONFIG_FILE = "config_base.json"
@@ -957,6 +960,13 @@ local function refreshTuneFiles(vehId)
             file = defaultPath,
             label = "Modded default",
             readOnly = not MODDED_DEFAULT_EDITABLE,
+        })
+    elseif genericTrafficDefaults[vehId] then
+        table.insert(tuneFiles, {
+            id = MODDED_DEFAULT_TUNE,
+            values = copyTbl(genericTrafficDefaults[vehId]),
+            label = "Generic modded default",
+            readOnly = true,
         })
     end
 
@@ -1599,6 +1609,166 @@ local function captureVehicleStock(veh)
     return stock[veh.id]
 end
 
+local function isLikelyTrafficVehicleRecord(vehId)
+    if type(vehId) ~= "string" then return false end
+    local lower = vehId:lower()
+    if lower:find("_player", 1, true) or lower:find("bike", 1, true) then return false end
+    local roadClass = lower:find("^vehicle%.v_standard") or
+        lower:find("^vehicle%.v_sport") or lower:find("^vehicle%.v_utility") or
+        lower:find("^vehicle%.ncpd_")
+    if not roadClass then return false end
+    return getRecord(vehId) ~= nil
+end
+
+local function exactVehicleInRoster(vehId)
+    for index, veh in ipairs(VEHICLES) do
+        for _, id in ipairs(candidateIds(veh)) do
+            if id:lower() == vehId:lower() then return index, veh end
+        end
+    end
+    return nil, nil
+end
+
+local function registerGenericTrafficVehicle(vehId)
+    if not isLikelyTrafficVehicleRecord(vehId) then return nil, nil end
+    local index, veh = exactVehicleInRoster(vehId)
+    if not veh then
+        index, veh = ensureVehicleInRoster(vehId)
+        if veh then
+            veh.class = "Generic Traffic Vehicles"
+            veh.hidden = true
+            veh.genericTraffic = true
+        end
+    end
+    return index, veh
+end
+
+local function removeLegacyGenericTrafficMetadata()
+    for vehId in pairs(metadata.genericTrafficVehicles or {}) do
+        local _, knownVehicle = exactVehicleInRoster(vehId)
+        if not knownVehicle and type(metadata.vehicles) == "table" then
+            metadata.vehicles[vehId] = nil
+        end
+    end
+    metadata.genericTrafficVehicles = nil
+end
+
+local function genericTrafficTuneValues(baseline)
+    local values = {}
+    local function setIfPresent(key, value)
+        if baseline[key] ~= nil then values[key] = value end
+    end
+    local function setHalvedAndClamped(key)
+        if type(baseline[key]) == "number" then
+            values[key] = math.max(0.08, math.min(0.15, baseline[key] * 0.5))
+        end
+    end
+
+    setHalvedAndClamped("weight_transfer_fwd")
+    setHalvedAndClamped("weight_transfer_side")
+    setIfPresent("turning_roll", 0.65)
+    setIfPresent("steer_turn_add", 180)
+    setIfPresent("steer_turn_sub", 250)
+    setIfPresent("steer_assist", 1)
+    setIfPresent("steer_speed_enabled", true)
+    setIfPresent("steer_base_speed", 3)
+    setIfPresent("steer_mid_speed", 28)
+    setIfPresent("steer_max_speed", 60)
+    setIfPresent("steer_mid_angle_mul", 0.34)
+    setIfPresent("steer_max_angle_mul", 0.15)
+    setIfPresent("steer_mid_rate_mul", 1.2)
+    setIfPresent("steer_max_rate_mul", 1.35)
+    setIfPresent("steer_input_pow", 0.8)
+    setIfPresent("steer_slow_rate", 0.08)
+    setIfPresent("steer_input_diff_slow", 0)
+    setIfPresent("steer_input_diff_fast", 1)
+    setIfPresent("steer_fast_rate", 1)
+
+    if type(baseline.inertia_x) == "number" and type(baseline.inertia_z) == "number" and
+        baseline.inertia_y ~= nil then
+        values.inertia_y = (baseline.inertia_x + baseline.inertia_z) * 0.5
+    end
+    return values
+end
+
+local function ensureGenericTrafficDefault(veh, applyNow)
+    if not veh then return false end
+    local baseline = genericTrafficBaselines[veh.id] or captureVehicleStock(veh)
+    if not baseline or not next(baseline) then return false end
+    local values = genericTrafficDefaults[veh.id] or genericTrafficTuneValues(baseline)
+    if not next(values) then return false end
+    genericTrafficBaselines[veh.id] = copyTbl(baseline)
+    genericTrafficDefaults[veh.id] = copyTbl(values)
+    stock[veh.id] = copyTbl(baseline)
+
+    local state = vehicleMetadata(veh.id)
+    state.activeTune = MODDED_DEFAULT_TUNE
+    if applyNow and state.activeTune:lower() == MODDED_DEFAULT_TUNE then
+        local ok = writeVehicle(veh.id, values)
+        if not ok then return false end
+    end
+    persistMetadata()
+    return true
+end
+
+local function prepareGenericTrafficDefaults()
+    local ok, records = pcall(function()
+        return TweakDB:GetRecords("gamedataVehicle_Record")
+    end)
+    if not ok or type(records) ~= "table" then
+        print("[UltimateVehicleTuning] Could not enumerate gamedataVehicle_Record records.")
+        return 0
+    end
+
+    local ids, seen = {}, {}
+    for _, record in ipairs(records) do
+        local idOk, vehId = pcall(function()
+            return vehicleIdString(record:GetID())
+        end)
+        if idOk and isLikelyTrafficVehicleRecord(vehId) and not seen[vehId] then
+            seen[vehId] = true
+            table.insert(ids, vehId)
+        end
+    end
+    table.sort(ids)
+
+    -- Capture every Vanilla baseline before changing any shared drive-model
+    -- record, then apply the partial generic values in a second pass.
+    for _, vehId in ipairs(ids) do
+        local _, baseline = firstReadableId({ id = vehId })
+        if baseline and next(baseline) then
+            genericTrafficBaselines[vehId] = copyTbl(baseline)
+        end
+    end
+
+    local prepared, failed = 0, 0
+    for _, vehId in ipairs(ids) do
+        local baseline = genericTrafficBaselines[vehId]
+        local values = baseline and genericTrafficTuneValues(baseline) or nil
+        local applied = values and next(values) and writeVehicle(vehId, values)
+        if applied then
+            genericTrafficDefaults[vehId] = copyTbl(values)
+            prepared = prepared + 1
+        else
+            failed = failed + 1
+        end
+    end
+
+    pcall(function()
+        local file = io.open(TRAFFIC_VEHICLE_LOG, "w")
+        if not file then return end
+        file:write("Non-player road-vehicle records in the installed TweakDB\n")
+        file:write("APPLIED marks records receiving the hidden generic Modded default.\n\n")
+        for _, vehId in ipairs(ids) do
+            file:write(genericTrafficDefaults[vehId] and "APPLIED " or "FAILED  ", vehId, "\n")
+        end
+        file:close()
+    end)
+    print("[UltimateVehicleTuning] Prepared hidden generic defaults for " .. prepared ..
+        " non-player road vehicles (" .. failed .. " unreadable/failed).")
+    return prepared
+end
+
 local function captureSessionStock()
     stock = {}
     local count = 0
@@ -1658,15 +1828,22 @@ local function applySelectedTunes()
             print("[UltimateVehicleTuning] Preserving unavailable tune selection \"" ..
                 tostring(state.activeTune) .. "\" for " .. veh.id)
         end
-        if tune and not tune.vanilla and type(tune.file) == "string" then
-            local document = loadJSON(tune.file)
-            local documentValues = type(document) == "table" and document.values or nil
-            local documentVehicleId = type(document) == "table" and document.vehicleId or nil
+        if tune and not tune.vanilla then
+            local document = type(tune.file) == "string" and loadJSON(tune.file) or nil
+            local documentValues = tune.values or
+                (type(document) == "table" and document.values or nil)
+            local documentVehicleId = tune.values and veh.id or
+                (type(document) == "table" and document.vehicleId or nil)
             if type(documentValues) == "table" and documentVehicleId == veh.id then
                 local params = copyTbl(stock[veh.id] or {})
                 for key, value in pairs(documentValues) do params[key] = value end
                 if next(params) then
-                    local ok, err = applyToVariants(veh, params)
+                    local ok, err
+                    if veh.genericTraffic then
+                        ok, err = writeVehicle(veh.id, documentValues)
+                    else
+                        ok, err = applyToVariants(veh, params)
+                    end
                     if ok then
                         count = count + 1
                     else
@@ -1760,7 +1937,9 @@ local function loadVehicleTune(index, tuneId, discardDirty, applyLive)
     if not tune then return false end
 
     local values = {}
-    if not tune.vanilla and type(tune.file) == "string" then
+    if type(tune.values) == "table" then
+        values = copyTbl(tune.values)
+    elseif not tune.vanilla and type(tune.file) == "string" then
         local document = loadJSON(tune.file)
         if not validTuneDocument(document, veh.id) then
             configStatus = "Invalid tune file for " .. veh.name
@@ -1895,7 +2074,12 @@ local function restoreSessionStock()
     for _, veh in ipairs(VEHICLES) do
         local params = stock[veh.id]
         if params and next(params) then
-            local ok, err = applyToVariants(veh, params)
+            local ok, err
+            if veh.genericTraffic then
+                ok, err = writeVehicle(veh.id, params)
+            else
+                ok, err = applyToVariants(veh, params)
+            end
             if ok then
                 count = count + 1
             else
@@ -2104,6 +2288,11 @@ local function listedVehicleForRecord(recordName)
 end
 
 local function applyPersistedTuneBeforeVehicleAttach(recordName)
+    -- Hidden traffic defaults are applied once before the normal player tunes.
+    -- Do not reapply them here: many traffic variants share a drive-model
+    -- record with a tuned player vehicle, whose more specific tune must win.
+    if genericTrafficDefaults[recordName] then return true end
+
     local _, veh = listedVehicleForRecord(recordName)
     if not veh then return false end
 
@@ -2159,11 +2348,17 @@ local function selectMounted(silent, applyLive)
 
     -- Prefer an exact player-record match so named variants do not collapse
     -- into an earlier base model that happens to share the same ID prefix.
-    for i, veh in ipairs(VEHICLES) do
-        for _, id in ipairs(candidateIds(veh)) do
-            if mounted:lower() == id:lower() then
-                return selectMatch(i, veh, applyLive == true)
-            end
+    local exactIndex, exactVehicle = exactVehicleInRoster(mounted)
+    if exactVehicle then
+        return selectMatch(exactIndex, exactVehicle, applyLive == true)
+    end
+
+    -- A mounted road vehicle is stronger evidence than a fuzzy shared-prefix
+    -- match. Give an unknown traffic variant its own generic default first.
+    if isLikelyTrafficVehicleRecord(mounted) then
+        local index, trafficVehicle = registerGenericTrafficVehicle(mounted)
+        if trafficVehicle and ensureGenericTrafficDefault(trafficVehicle, false) then
+            return selectMatch(index, trafficVehicle, false)
         end
     end
 
@@ -2177,8 +2372,6 @@ local function selectMounted(silent, applyLive)
         end
     end
 
-    -- A mounted record is the final authority. This also supports a new game
-    -- record or a custom vehicle that is absent from the official garage list.
     local mountedVehicle = {
         id = mounted,
         name = friendlyVehicleName(mounted),
@@ -2496,14 +2689,16 @@ local function drawVehiclePanel()
     if ImGui.BeginCombo("##vehicle", preview, ImGuiComboFlags.HeightLargest) then
         local lastClass = nil
         for i, v in ipairs(VEHICLES) do
-            if v.class ~= lastClass then
-                ImGui.Separator()
-                ImGui.TextDisabled(v.class)
-                lastClass = v.class
+            if not v.hidden then
+                if v.class ~= lastClass then
+                    ImGui.Separator()
+                    ImGui.TextDisabled(v.class)
+                    lastClass = v.class
+                end
+                local isActive = i == selected
+                local label = (isActive and "> " or "") .. v.name .. " [" .. v.class .. "]"
+                if ImGui.Selectable(label, false) and not isActive then selectVehicle(i) end
             end
-            local isActive = i == selected
-            local label = (isActive and "> " or "") .. v.name .. " [" .. v.class .. "]"
-            if ImGui.Selectable(label, false) and not isActive then selectVehicle(i) end
         end
         ImGui.EndCombo()
     end
@@ -2587,9 +2782,11 @@ registerForEvent("onInit", function()
     if type(loadedMetadata) == "table" then
         metadata = loadedMetadata
     end
+    removeLegacyGenericTrafficMetadata()
     local baseDocument = loadJSON(BASE_CONFIG_FILE)
     local cleanSlate = initializeTuneStorage(baseDocument)
     captureSessionStock()
+    prepareGenericTrafficDefaults()
     applySelectedTunes()
     loadVehicleTune(selected, vehicleMetadata(VEHICLES[selected].id).activeTune, true, false)
     gameSessionActive = isGameSessionReady()
@@ -2603,7 +2800,17 @@ registerForEvent("onInit", function()
     local vehicleObserverOk, vehicleObserverErr = pcall(function()
         Observe("VehicleObject", "OnGameAttached", function(vehicle)
             local recordName = vehicleRecordName(vehicle)
-            if recordName then applyPersistedTuneBeforeVehicleAttach(recordName) end
+            if not recordName then return end
+
+            local _, listed = exactVehicleInRoster(recordName)
+            if not listed and isLikelyTrafficVehicleRecord(recordName) then
+                local _, trafficVehicle = registerGenericTrafficVehicle(recordName)
+                if trafficVehicle and ensureGenericTrafficDefault(trafficVehicle, false) then
+                    print("[UltimateVehicleTuning] Registered generic traffic default for " ..
+                        recordName)
+                end
+            end
+            applyPersistedTuneBeforeVehicleAttach(recordName)
         end)
     end)
     if not vehicleObserverOk then

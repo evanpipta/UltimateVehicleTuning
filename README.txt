@@ -150,6 +150,12 @@ Each vehicle has its own tune selection:
 
 The selected tune is remembered separately for every vehicle. Once you choose a tune, the mod will continue loading it for that vehicle until you select another one.
 
+Unknown traffic vehicles
+
+NPC traffic variants and police vehicles are not all included in the game's normal player-vehicle list. At startup, the mod finds non-player car and truck records and applies a conservative generic Modded default directly in memory.
+
+The generated fallback improves steering response, uses safe speed-sensitive steering values, reduces and bounds weight transfer, sets turning roll to 0.65, and sets roll inertia to the midpoint of each vehicle's stock pitch and yaw inertia. These records stay hidden from the normal vehicle list; a mounted traffic vehicle can still be inspected as using "Generic modded default." The records successfully updated are written to UltimateVehicleTuning_TrafficVehicles.log.
+
 Creating and editing a custom tune
 
 1. Select the vehicle and starting tune you want.
