@@ -103,9 +103,72 @@ local function friendlyVehicleName(id)
     return name
 end
 
+local VEHICLE_CLASS_ORDER = {
+    Hypercar = 1,
+    Sport = 2,
+    Truck = 3,
+    Luxury = 4,
+    Economy = 5,
+    Bike = 6,
+    ["Additional Player Vehicles"] = 7,
+}
+
+local function vehicleFamilyId(id)
+    return tostring(id or ""):lower():gsub("_player.*$", "")
+end
+
+local function classifyPlayerVehicle(id)
+    local target = vehicleFamilyId(id)
+    local bestClass, bestLength = nil, 0
+
+    -- Prefer the longest family represented by the curated roster. This makes
+    -- newly discovered cosmetic, quest, and expansion variants inherit the
+    -- same class as their known model without maintaining every record ID.
+    for _, known in ipairs(VEHICLES) do
+        if known.class ~= "Additional Player Vehicles" then
+            local family = vehicleFamilyId(known.id)
+            if #family > bestLength and
+                (target == family or target:sub(1, #family + 1) == family .. "_") then
+                bestClass = known.class
+                bestLength = #family
+            end
+        end
+    end
+    if bestClass then return bestClass end
+
+    if target:find("sportbike", 1, true) then return "Bike" end
+    if target:find("colby_nomad", 1, true) or target:find("colby_pickup", 1, true) then
+        return "Truck"
+    end
+    if target:find("^vehicle%.v_utility") or target:find("^vehicle%.v_standard3") then
+        return "Truck"
+    end
+    if target:find("^vehicle%.v_sport") then return "Sport" end
+    if target:find("^vehicle%.v_standard") then return "Economy" end
+    return "Additional Player Vehicles"
+end
+
+local function sortVehicleRosterByClass()
+    for index, veh in ipairs(VEHICLES) do
+        if not veh._rosterOrder then veh._rosterOrder = index end
+    end
+    table.sort(VEHICLES, function(a, b)
+        local aRank = VEHICLE_CLASS_ORDER[a.class] or 99
+        local bRank = VEHICLE_CLASS_ORDER[b.class] or 99
+        if aRank ~= bRank then return aRank < bRank end
+        local aName = tostring(a.name or a.id):lower()
+        local bName = tostring(b.name or b.id):lower()
+        if aName ~= bName then return aName < bName end
+        return tostring(a.id):lower() < tostring(b.id):lower()
+    end)
+end
+
 local function discoverOfficialVehicles()
     local byId = {}
-    for _, veh in ipairs(VEHICLES) do byId[veh.id:lower()] = veh end
+    for index, veh in ipairs(VEHICLES) do
+        veh._rosterOrder = index
+        byId[veh.id:lower()] = veh
+    end
 
     local muramasa = byId["vehicle.v_sportbike1_yaiba_muramasa_player"]
     if muramasa then
@@ -134,13 +197,15 @@ local function discoverOfficialVehicles()
             local veh = {
                 id = id,
                 name = friendlyVehicleName(id),
-                class = "Additional Player Vehicles",
+                class = classifyPlayerVehicle(id),
+                _rosterOrder = #VEHICLES + 1,
             }
             table.insert(VEHICLES, veh)
             byId[id:lower()] = veh
             added = added + 1
         end
     end
+    sortVehicleRosterByClass()
     print("[UltimateVehicleTuning] Loaded " .. #VEHICLES ..
         " player vehicle physics entries (" .. added .. " discovered).")
 end
@@ -1590,7 +1655,8 @@ local function ensureVehicleInRoster(vehId)
     local veh = {
         id = vehId,
         name = friendlyVehicleName(vehId),
-        class = vehId:lower():find("sportbike", 1, true) and "Bike" or "Additional Player Vehicles",
+        class = classifyPlayerVehicle(vehId),
+        _rosterOrder = #VEHICLES + 1,
     }
     table.insert(VEHICLES, veh)
     return #VEHICLES, veh
@@ -2785,6 +2851,7 @@ registerForEvent("onInit", function()
     removeLegacyGenericTrafficMetadata()
     local baseDocument = loadJSON(BASE_CONFIG_FILE)
     local cleanSlate = initializeTuneStorage(baseDocument)
+    sortVehicleRosterByClass()
     captureSessionStock()
     prepareGenericTrafficDefaults()
     applySelectedTunes()
