@@ -736,13 +736,35 @@ local loadingTunesApplied = false
 local loadingMountedTuneApplied = false
 local genericTrafficDefaults = {}
 local genericTrafficBaselines = {}
+local resetAccelerationTimer
+local selectMounted
+local accelerationTimer = {
+    active = false,
+    started = false,
+    elapsed = 0,
+    speedMps = 0,
+    topSpeedMps = 0,
+    previousSpeedKph = 0,
+    times = {},
+    status = "Ready",
+    vehicleId = nil,
+    mountedVehicleId = nil,
+    tuneId = nil,
+    observedMountedVehicleId = nil,
+    lastVehicle = nil,
+    lastPosition = nil,
+}
 
 local TUNES_ROOT = "tunes"
 local VANILLA_TUNE = "vanilla"
 local MODDED_DEFAULT_TUNE = "modded_default"
 local TRAFFIC_VEHICLE_LOG = "UltimateVehicleTuning_TrafficVehicles.log"
+local ACCELERATION_RESULTS_FILE = "acceleration_results.json"
 -- Authoring switch: allow Modded default tunes to be edited and saved in-game.
 local MODDED_DEFAULT_EDITABLE = true
+-- Developer switch: set false before release to remove the acceleration timer.
+local DEV_ACCELERATION_TIMER_ENABLED = true
+local ACCELERATION_CHECKPOINTS_KPH = { 100, 150, 200, 300 }
 local BASE_CONFIG_FILE = "config_base.json"
 local METADATA_FILE = "metadata.json"
 
@@ -1986,6 +2008,9 @@ local function loadVehicleTune(index, tuneId, discardDirty, applyLive)
     if index < 1 or index > #VEHICLES then return false end
     if not prepareContextSwitch(discardDirty) then return false end
 
+    local previousVehicle = currentVeh()
+    local previousVehicleId = previousVehicle and previousVehicle.id or nil
+    local previousTuneId = tostring(activeTuneId or ""):lower()
     selected = index
     local veh = currentVeh()
     if not captureVehicleStock(veh) then
@@ -2030,6 +2055,13 @@ local function loadVehicleTune(index, tuneId, discardDirty, applyLive)
         lastError = "Could not save selected tune: " .. tostring(metadataErr)
         configStatus = lastError
         return false
+    end
+
+    local contextChanged = previousVehicleId ~= veh.id or
+        previousTuneId ~= tostring(tune.id or ""):lower()
+    if contextChanged and DEV_ACCELERATION_TIMER_ENABLED and resetAccelerationTimer then
+        resetAccelerationTimer()
+        accelerationTimer.status = "Ready - vehicle/tune changed"
     end
 
     if applyLive then
@@ -2192,6 +2224,224 @@ local function mountedRecordName()
     end)
     if ok then return name end
     return nil
+end
+
+local function mountedVehicleObject()
+    local ok, vehicle = pcall(function()
+        local player = Game.GetPlayer()
+        return player and player:GetMountedVehicle() or nil
+    end)
+    return ok and vehicle or nil
+end
+
+local function accelerationVectorSpeed(value)
+    if type(value) == "number" then return math.abs(value) end
+    local x = vectorComponent(value, "x", "X")
+    local y = vectorComponent(value, "y", "Y")
+    local z = vectorComponent(value, "z", "Z") or 0
+    if x == nil or y == nil then return nil end
+    return math.sqrt(x * x + y * y + z * z)
+end
+
+local function sampleMountedVehicleSpeed(vehicle, deltaTime)
+    local ok, value = pcall(function() return vehicle:GetVelocity() end)
+    local speed = ok and accelerationVectorSpeed(value) or nil
+    if speed == nil then
+        ok, value = pcall(function() return vehicle:GetLinearVelocity() end)
+        speed = ok and accelerationVectorSpeed(value) or nil
+    end
+    if speed == nil then
+        ok, value = pcall(function() return vehicle:GetCurrentSpeed() end)
+        speed = ok and accelerationVectorSpeed(value) or nil
+    end
+    if speed ~= nil then
+        accelerationTimer.lastVehicle = vehicle
+        accelerationTimer.lastPosition = nil
+        return speed
+    end
+
+    local positionOk, position = pcall(function() return vehicle:GetWorldPosition() end)
+    if not positionOk or not position then return nil end
+    local x = vectorComponent(position, "x", "X")
+    local y = vectorComponent(position, "y", "Y")
+    local z = vectorComponent(position, "z", "Z") or 0
+    if x == nil or y == nil then return nil end
+
+    local previous = accelerationTimer.lastPosition
+    local sameVehicle = accelerationTimer.lastVehicle == vehicle
+    accelerationTimer.lastVehicle = vehicle
+    accelerationTimer.lastPosition = { x = x, y = y, z = z }
+    if not sameVehicle or not previous or type(deltaTime) ~= "number" or
+        deltaTime <= 0 or deltaTime > 0.25 then
+        return nil
+    end
+    local dx, dy, dz = x - previous.x, y - previous.y, z - previous.z
+    return math.sqrt(dx * dx + dy * dy + dz * dz) / deltaTime
+end
+
+local function saveAccelerationResult(reason)
+    if not accelerationTimer.started or not accelerationTimer.vehicleId or
+        not accelerationTimer.tuneId then
+        return false, "No acceleration run to save"
+    end
+
+    local document = loadJSON(ACCELERATION_RESULTS_FILE)
+    if type(document) ~= "table" then document = {} end
+    document.version = 1
+    document.vehicles = type(document.vehicles) == "table" and document.vehicles or {}
+
+    local vehicleResults = document.vehicles[accelerationTimer.vehicleId]
+    if type(vehicleResults) ~= "table" then
+        vehicleResults = {}
+        document.vehicles[accelerationTimer.vehicleId] = vehicleResults
+    end
+
+    local checkpoints = {}
+    for _, checkpoint in ipairs(ACCELERATION_CHECKPOINTS_KPH) do
+        local checkpointTime = accelerationTimer.times[checkpoint]
+        if checkpointTime ~= nil then
+            checkpoints[tostring(checkpoint)] = checkpointTime
+        end
+    end
+
+    local topSpeedMps = accelerationTimer.topSpeedMps or 0
+    vehicleResults[accelerationTimer.tuneId] = {
+        vehicleId = accelerationTimer.vehicleId,
+        mountedVehicleId = accelerationTimer.mountedVehicleId,
+        tune = accelerationTimer.tuneId,
+        stopReason = reason or "stopped",
+        elapsedTime = accelerationTimer.elapsed or 0,
+        topSpeedMps = topSpeedMps,
+        topSpeedKph = topSpeedMps * 3.6,
+        topSpeedMph = topSpeedMps * 2.2369362921,
+        checkpointsKph = checkpoints,
+    }
+
+    return saveJSON(ACCELERATION_RESULTS_FILE, document)
+end
+
+resetAccelerationTimer = function()
+    accelerationTimer.active = false
+    accelerationTimer.started = false
+    accelerationTimer.elapsed = 0
+    accelerationTimer.topSpeedMps = 0
+    accelerationTimer.previousSpeedKph = accelerationTimer.speedMps * 3.6
+    accelerationTimer.times = {}
+    accelerationTimer.vehicleId = nil
+    accelerationTimer.mountedVehicleId = nil
+    accelerationTimer.tuneId = nil
+    accelerationTimer.status = "Ready"
+end
+
+local function startAccelerationTimer()
+    local mountedVehicle = mountedVehicleObject()
+    if not mountedVehicle then
+        accelerationTimer.active = false
+        accelerationTimer.status = "No vehicle mounted"
+        return
+    end
+    if selectMounted and not selectMounted(true, false) then
+        accelerationTimer.active = false
+        accelerationTimer.status = "Could not select the mounted vehicle/tune"
+        return
+    end
+    resetAccelerationTimer()
+    local selectedVehicle = currentVeh()
+    accelerationTimer.vehicleId = selectedVehicle and selectedVehicle.id or mountedRecordName()
+    accelerationTimer.mountedVehicleId = mountedRecordName()
+    accelerationTimer.tuneId = tostring(activeTuneId or VANILLA_TUNE)
+    accelerationTimer.topSpeedMps = accelerationTimer.speedMps or 0
+    accelerationTimer.active = true
+    if accelerationTimer.speedMps * 3.6 >= 1 then
+        accelerationTimer.started = true
+        accelerationTimer.elapsed = 0
+        accelerationTimer.status = "Running"
+    else
+        accelerationTimer.status = "Armed - waiting for launch"
+    end
+    accelerationTimer.previousSpeedKph = accelerationTimer.speedMps * 3.6
+end
+
+local function stopAccelerationTimer()
+    accelerationTimer.active = false
+    if accelerationTimer.started then
+        local savedOk, saveErr = saveAccelerationResult("stopped")
+        accelerationTimer.status = savedOk and "Stopped - results saved" or
+            ("Stopped - save failed: " .. tostring(saveErr))
+    else
+        accelerationTimer.status = "Ready"
+    end
+end
+
+local function updateAccelerationTimer(deltaTime)
+    if not DEV_ACCELERATION_TIMER_ENABLED then return end
+    local vehicle = mountedVehicleObject()
+    if not vehicle then
+        accelerationTimer.speedMps = 0
+        accelerationTimer.previousSpeedKph = 0
+        accelerationTimer.lastVehicle = nil
+        accelerationTimer.lastPosition = nil
+        if accelerationTimer.active then
+            accelerationTimer.active = false
+            if accelerationTimer.started then
+                local savedOk, saveErr = saveAccelerationResult("vehicle exited")
+                accelerationTimer.status = savedOk and
+                    "Stopped - vehicle exited; results saved" or
+                    ("Stopped - save failed: " .. tostring(saveErr))
+            else
+                accelerationTimer.status = "Stopped - vehicle exited"
+            end
+        end
+        return
+    end
+
+    local sampledSpeed = sampleMountedVehicleSpeed(vehicle, deltaTime)
+    if sampledSpeed == nil then
+        if accelerationTimer.active then accelerationTimer.status = "Speed unavailable" end
+        return
+    end
+
+    accelerationTimer.speedMps = sampledSpeed
+    local speedKph = sampledSpeed * 3.6
+    local previousSpeedKph = accelerationTimer.previousSpeedKph or speedKph
+    accelerationTimer.previousSpeedKph = speedKph
+    if not accelerationTimer.active then return end
+
+    if not accelerationTimer.started then
+        if speedKph < 1 then return end
+        accelerationTimer.started = true
+        accelerationTimer.elapsed = 0
+        accelerationTimer.status = "Running"
+        previousSpeedKph = 0
+    end
+
+    accelerationTimer.topSpeedMps = math.max(
+        accelerationTimer.topSpeedMps or 0,
+        sampledSpeed
+    )
+
+    if type(deltaTime) ~= "number" or deltaTime <= 0 or deltaTime > 0.25 then return end
+    local previousElapsed = accelerationTimer.elapsed
+    accelerationTimer.elapsed = accelerationTimer.elapsed + deltaTime
+    local speedGain = speedKph - previousSpeedKph
+
+    if speedGain > 0 then
+        for _, checkpoint in ipairs(ACCELERATION_CHECKPOINTS_KPH) do
+            if accelerationTimer.times[checkpoint] == nil and
+                previousSpeedKph < checkpoint and speedKph >= checkpoint then
+                local fraction = (checkpoint - previousSpeedKph) / speedGain
+                accelerationTimer.times[checkpoint] = previousElapsed + deltaTime * fraction
+            end
+        end
+    end
+
+    local finalCheckpoint = ACCELERATION_CHECKPOINTS_KPH[#ACCELERATION_CHECKPOINTS_KPH]
+    if accelerationTimer.times[finalCheckpoint] ~= nil then
+        accelerationTimer.active = false
+        local savedOk, saveErr = saveAccelerationResult("300 km/h reached")
+        accelerationTimer.status = savedOk and "Complete - results saved" or
+            ("Complete - save failed: " .. tostring(saveErr))
+    end
 end
 
 local function vehicleTypeForRecord(recordName)
@@ -2393,7 +2643,7 @@ local function applyPersistedTuneBeforeVehicleAttach(recordName)
     return true
 end
 
-local function selectMounted(silent, applyLive)
+selectMounted = function(silent, applyLive)
     local mounted = mountedRecordName()
     if not mounted then
         if not silent then statusMessage = "You are not in a vehicle." end
@@ -2746,6 +2996,75 @@ local function drawTunePanel()
     ImGui.PopStyleColor()
 end
 
+local function drawAccelerationTimer()
+    if not DEV_ACCELERATION_TIMER_ENABLED then return end
+
+    ImGui.Separator()
+    ImGui.TextDisabled("ACCELERATION STOPWATCH [DEV]")
+    ImGui.SameLine()
+    ImGui.Text(accelerationTimer.status)
+
+    local finalCheckpoint = ACCELERATION_CHECKPOINTS_KPH[#ACCELERATION_CHECKPOINTS_KPH]
+    local canStart = not accelerationTimer.active and
+        accelerationTimer.times[finalCheckpoint] == nil
+    if not canStart then ImGui.BeginDisabled() end
+    if ImGui.Button("Start##acceleration_timer", 100, 0) then
+        startAccelerationTimer()
+    end
+    if not canStart then ImGui.EndDisabled() end
+
+    ImGui.SameLine()
+    if not accelerationTimer.active then ImGui.BeginDisabled() end
+    if ImGui.Button("Stop##acceleration_timer", 100, 0) then
+        stopAccelerationTimer()
+    end
+    if not accelerationTimer.active then ImGui.EndDisabled() end
+
+    ImGui.SameLine()
+    if ImGui.Button("Reset##acceleration_timer", 100, 0) then
+        resetAccelerationTimer()
+    end
+
+    local speedMps = accelerationTimer.speedMps or 0
+    ImGui.SameLine()
+    ImGui.Text(string.format(
+        "%.2f m/s  |  %.1f km/h  |  %.1f mph  |  %.3f s",
+        speedMps,
+        speedMps * 3.6,
+        speedMps * 2.2369362921,
+        accelerationTimer.elapsed or 0
+    ))
+
+    local topSpeedMps = accelerationTimer.topSpeedMps or 0
+    ImGui.Text(string.format(
+        "Top speed this run: %.2f m/s  |  %.1f km/h  |  %.1f mph",
+        topSpeedMps,
+        topSpeedMps * 3.6,
+        topSpeedMps * 2.2369362921
+    ))
+
+    if ImGui.BeginTable("##acceleration_results", 4, 0) then
+        ImGui.TableSetupColumn("km/h")
+        ImGui.TableSetupColumn("mph")
+        ImGui.TableSetupColumn("m/s")
+        ImGui.TableSetupColumn("time")
+        ImGui.TableHeadersRow()
+        for _, checkpoint in ipairs(ACCELERATION_CHECKPOINTS_KPH) do
+            ImGui.TableNextRow()
+            ImGui.TableSetColumnIndex(0)
+            ImGui.Text(string.format("%d", checkpoint))
+            ImGui.TableSetColumnIndex(1)
+            ImGui.Text(string.format("%.1f", checkpoint / 1.609344))
+            ImGui.TableSetColumnIndex(2)
+            ImGui.Text(string.format("%.2f", checkpoint / 3.6))
+            ImGui.TableSetColumnIndex(3)
+            local checkpointTime = accelerationTimer.times[checkpoint]
+            ImGui.Text(checkpointTime and string.format("%.3f s", checkpointTime) or "--")
+        end
+        ImGui.EndTable()
+    end
+end
+
 local function drawVehiclePanel()
     local veh = currentVeh()
     local preview = veh and (veh.name .. " [" .. veh.class .. "]") or "Select vehicle"
@@ -2792,6 +3111,7 @@ local function drawUI()
             drawVehiclePanel()
             ImGui.Separator()
             drawTunePanel()
+            drawAccelerationTimer()
 
             if lastError ~= "" then
                 ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.25, 0.15, 1.0)
@@ -2936,7 +3256,17 @@ registerForEvent("onUpdate", function(deltaTime)
 
     local mounted = mountedRecordName()
     if mounted then lastMountedRecordName = mounted end
+    if DEV_ACCELERATION_TIMER_ENABLED and
+        mounted ~= accelerationTimer.observedMountedVehicleId then
+        if accelerationTimer.active and accelerationTimer.started then
+            saveAccelerationResult(mounted and "vehicle changed" or "vehicle exited")
+        end
+        resetAccelerationTimer()
+        accelerationTimer.observedMountedVehicleId = mounted
+        accelerationTimer.status = mounted and "Ready - vehicle changed" or "Ready"
+    end
     updatePendingRespawn(deltaTime)
+    updateAccelerationTimer(deltaTime)
 end)
 
 registerForEvent("onDraw", function()
