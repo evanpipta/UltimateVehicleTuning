@@ -1,0 +1,45 @@
+name: Build release archive
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Determine archive name
+        id: archive
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          $safeTag = $env:RELEASE_TAG -replace '[^A-Za-z0-9._-]', '-'
+          $archiveName = "UltimateVehicleTuning-$safeTag.zip"
+          $archivePath = Join-Path $env:RUNNER_TEMP $archiveName
+          "name=$archiveName" >> $env:GITHUB_OUTPUT
+          "path=$archivePath" >> $env:GITHUB_OUTPUT
+
+      - name: Build release archive
+        shell: pwsh
+        run: |
+          .\package-release.ps1 -OutputPath '${{ steps.archive.outputs.path }}'
+
+      - name: Upload archive to release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          ARCHIVE_PATH: ${{ steps.archive.outputs.path }}
+        run: |
+          gh release upload $env:RELEASE_TAG $env:ARCHIVE_PATH `
+            --repo $env:GITHUB_REPOSITORY `
+            --clobber
