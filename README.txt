@@ -16,7 +16,7 @@ Ultimate Vehicle Tuning aims to massively improve Cyberpunk 2077's driving exper
 
 It exposes a huge range of vehicle-handling parameters on a per-vehicle basis through a Cyber Engine Tweaks UI. You can save, load, and switch between any number of custom tunes for each vehicle.
 
-The mod ships with a Modded default tune for every supported vehicle. These tunes aim to make vehicles feel more realistic, predictable, and satisfying to drive.
+The mod ships with a Modded default tune for every supported vehicle. These tunes use increased realism as a guide, but prioritize driving enjoyment, smoothness, predictability, and controllability over strict simulation.
 
 You can also switch any vehicle back to its untouched Vanilla setup at any time from the mod's UI and make your own changes starting Vanilla.
 
@@ -44,11 +44,13 @@ Spring stiffness, damping, rebound, anti-roll stiffness, weight transfer, and ti
 
 5. Conservative performance
 
-Vanilla vehicles have acceleration and top-speed tuning that feels too conservative for their class. Despite the UI showing an "MPH" value, vehicle and gear data use meters per second for internal calculations, and absolute speeds are actually much lower than the displayed number would suggest.
+Vanilla vehicles often have acceleration and top-speed tuning that is conservative for their class. Despite the UI showing an "MPH" value, vehicle and gear data use meters per second for internal calculations, and absolute speeds are much lower than the displayed number would suggest. Night City's dense, uneven streets also make real-world performance impractical for much of the vehicle roster, so the included tunes intentionally do not attempt to turn every vehicle into a realistic performance simulation.
 
 ---
 
 How the included Modded default tunes feel
+
+- The handling philosophy is grounded in increased physical plausibility, but realism is not pursued at the expense of fun. The primary goal is to make every vehicle feel satisfying, smooth, responsive, and easy to control while preserving its individual character.
 
 - Steering input speed and maximum steering angle now adjust more naturally as speed increases. Faster base steering and carefully reduced high-speed steering angles allow more precise cornering without making vehicles uncontrollably twitchy.
 
@@ -58,9 +60,11 @@ How the included Modded default tunes feel
 
 - Tire grip, weight transfer, and suspension have been rebalanced across many vehicles. Sport and hypercar models can still oversteer, but it is much more progressive and controllable.
 
-- Sports cars, hypercars, and bikes have reworked gearing and performance, aiming for more realistic top speeds and acceleration. Improved handling makes it practical to use the additional speed without immediately losing control.
+- Performance changes are deliberately selective rather than a fleet-wide attempt at real-world acceleration and top speed. Most vehicles retain acceleration close to their vanilla balance, preserving useful distinctions between economy cars, sports cars, race variants, and hypercars on Night City's roads.
 
-- Most vehicles received conservative top-end extensions. More extensive acceleration-focused gearing changes were made to the Porsche 911 Turbo and Cabriolet, Quadra Turbo-R V-Tech, Mizutani Shion MZ2, and Rayfield Caliburn variants. The Caliburns, Rayfield Aerondight, Herrera Riptide, Turbo-R V-Tech, Quadra Type-66 GT variant, Thorton Merrimac Warlock, and both Porsche 911 variants also received notable air-resistance revisions where their original drag prevented appropriate performance.
+- Most vehicles received only conservative top-end extensions. More extensive acceleration-focused gearing changes were intentionally reserved for selected iconic and high-performance vehicles, including the Porsche 911 Turbo and Cabriolet, Quadra Turbo-R V-Tech, Mizutani Shion MZ2, Quadra Type-66 Avenger, and Rayfield Caliburn variants. The Caliburns, Rayfield Aerondight, Herrera Riptide, Turbo-R V-Tech, Quadra Type-66 GT and Avenger variants, Thorton Merrimac Warlock, and both Porsche 911 variants also received notable air-resistance revisions where their original drag prevented appropriate performance.
+
+- The included stopwatch, optional accurate MPH/KPH speedometer archives, Easy gearing controls, and advanced parameters remain available for players who want to pursue more realistic performance or create a different balance.
 
 - Bikes receive substantially more rear lateral grip, revised inertia on all axes, increased maximum tilt on sport bikes, and less twitchy tilt/lean speed. An optional bike-curves archive allows bikes to lean more naturally at lower speeds.
 
