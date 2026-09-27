@@ -769,9 +769,11 @@ local MODDED_DEFAULT_TUNE = "modded_default"
 local TRAFFIC_VEHICLE_LOG = "UltimateVehicleTuning_TrafficVehicles.log"
 local ACCELERATION_RESULTS_FILE = "acceleration_results.json"
 -- Authoring switch: allow Modded default tunes to be edited and saved in-game.
-local MODDED_DEFAULT_EDITABLE = true
--- Developer switch: set false before release to remove the acceleration timer.
-local DEV_ACCELERATION_TIMER_ENABLED = true
+local MODDED_DEFAULT_EDITABLE = false
+-- Public feature switch for the in-game acceleration stopwatch.
+local ACCELERATION_TIMER_ENABLED = true
+-- Developer switch: write completed stopwatch runs to acceleration_results.json.
+local DEV_SAVE_ACCELERATION_RESULTS = false
 local ACCELERATION_CHECKPOINTS_KPH = { 100, 150, 200, 300 }
 local BASE_CONFIG_FILE = "config_base.json"
 local METADATA_FILE = "metadata.json"
@@ -2146,7 +2148,7 @@ local function loadVehicleTune(index, tuneId, discardDirty, applyLive)
 
     local contextChanged = previousVehicleId ~= veh.id or
         previousTuneId ~= tostring(tune.id or ""):lower()
-    if contextChanged and DEV_ACCELERATION_TIMER_ENABLED and resetAccelerationTimer then
+    if contextChanged and ACCELERATION_TIMER_ENABLED and resetAccelerationTimer then
         resetAccelerationTimer()
         accelerationTimer.status = "Ready - vehicle/tune changed"
     end
@@ -2371,6 +2373,7 @@ local function saveAccelerationResult(reason)
         not accelerationTimer.tuneId then
         return false, "No acceleration run to save"
     end
+    if not DEV_SAVE_ACCELERATION_RESULTS then return true, nil, false end
 
     local document = loadJSON(ACCELERATION_RESULTS_FILE)
     if type(document) ~= "table" then document = {} end
@@ -2404,7 +2407,8 @@ local function saveAccelerationResult(reason)
         checkpointsKph = checkpoints,
     }
 
-    return saveJSON(ACCELERATION_RESULTS_FILE, document)
+    local ok, err = saveJSON(ACCELERATION_RESULTS_FILE, document)
+    return ok, err, true
 end
 
 resetAccelerationTimer = function()
@@ -2452,8 +2456,9 @@ end
 local function stopAccelerationTimer()
     accelerationTimer.active = false
     if accelerationTimer.started then
-        local savedOk, saveErr = saveAccelerationResult("stopped")
-        accelerationTimer.status = savedOk and "Stopped - results saved" or
+        local savedOk, saveErr, resultsSaved = saveAccelerationResult("stopped")
+        accelerationTimer.status = savedOk and
+            (resultsSaved and "Stopped - results saved" or "Stopped") or
             ("Stopped - save failed: " .. tostring(saveErr))
     else
         accelerationTimer.status = "Ready"
@@ -2461,7 +2466,7 @@ local function stopAccelerationTimer()
 end
 
 local function updateAccelerationTimer(deltaTime)
-    if not DEV_ACCELERATION_TIMER_ENABLED then return end
+    if not ACCELERATION_TIMER_ENABLED then return end
     local vehicle = mountedVehicleObject()
     if not vehicle then
         accelerationTimer.speedMps = 0
@@ -2471,9 +2476,10 @@ local function updateAccelerationTimer(deltaTime)
         if accelerationTimer.active then
             accelerationTimer.active = false
             if accelerationTimer.started then
-                local savedOk, saveErr = saveAccelerationResult("vehicle exited")
+                local savedOk, saveErr, resultsSaved = saveAccelerationResult("vehicle exited")
                 accelerationTimer.status = savedOk and
-                    "Stopped - vehicle exited; results saved" or
+                    (resultsSaved and "Stopped - vehicle exited; results saved" or
+                        "Stopped - vehicle exited") or
                     ("Stopped - save failed: " .. tostring(saveErr))
             else
                 accelerationTimer.status = "Stopped - vehicle exited"
@@ -2525,8 +2531,9 @@ local function updateAccelerationTimer(deltaTime)
     local finalCheckpoint = ACCELERATION_CHECKPOINTS_KPH[#ACCELERATION_CHECKPOINTS_KPH]
     if accelerationTimer.times[finalCheckpoint] ~= nil then
         accelerationTimer.active = false
-        local savedOk, saveErr = saveAccelerationResult("300 km/h reached")
-        accelerationTimer.status = savedOk and "Complete - results saved" or
+        local savedOk, saveErr, resultsSaved = saveAccelerationResult("300 km/h reached")
+        accelerationTimer.status = savedOk and
+            (resultsSaved and "Complete - results saved" or "Complete") or
             ("Complete - save failed: " .. tostring(saveErr))
     end
 end
@@ -2965,7 +2972,7 @@ end
 local drawGroup
 
 local function drawGearingGroup()
-    if DEV_ACCELERATION_TIMER_ENABLED then
+    if ACCELERATION_TIMER_ENABLED then
         if ImGui.Button("Open Acceleration Stopwatch", 260, 0) then
             easyGearing.stopwatchOpen = true
         end
@@ -3272,10 +3279,10 @@ local function drawTunePanel()
 end
 
 local function drawAccelerationTimer()
-    if not DEV_ACCELERATION_TIMER_ENABLED then return end
+    if not ACCELERATION_TIMER_ENABLED then return end
 
     ImGui.Separator()
-    ImGui.TextDisabled("ACCELERATION STOPWATCH [DEV]")
+    ImGui.TextDisabled("ACCELERATION STOPWATCH")
     ImGui.SameLine()
     ImGui.Text(accelerationTimer.status)
 
@@ -3341,7 +3348,7 @@ local function drawAccelerationTimer()
 end
 
 local function drawAccelerationStopwatchWindow()
-    if not DEV_ACCELERATION_TIMER_ENABLED or not easyGearing.stopwatchOpen then return end
+    if not ACCELERATION_TIMER_ENABLED or not easyGearing.stopwatchOpen then return end
 
     ImGui.SetNextWindowSize(640, 320, ImGuiCond.FirstUseEver)
     if ImGui.Begin("Acceleration Stopwatch") then
@@ -3554,7 +3561,7 @@ registerForEvent("onUpdate", function(deltaTime)
 
     local mounted = mountedRecordName()
     if mounted then lastMountedRecordName = mounted end
-    if DEV_ACCELERATION_TIMER_ENABLED and
+    if ACCELERATION_TIMER_ENABLED and
         mounted ~= accelerationTimer.observedMountedVehicleId then
         if accelerationTimer.active and accelerationTimer.started then
             saveAccelerationResult(mounted and "vehicle changed" or "vehicle exited")

@@ -60,6 +60,8 @@ How the included Modded default tunes feel
 
 - Sports cars, hypercars, and bikes have reworked gearing and performance, aiming for more realistic top speeds and acceleration. Improved handling makes it practical to use the additional speed without immediately losing control.
 
+- Most vehicles received conservative top-end extensions. More extensive acceleration-focused gearing changes were made to the Porsche 911 Turbo and Cabriolet, Quadra Turbo-R V-Tech, Mizutani Shion MZ2, and Rayfield Caliburn variants. The Caliburns, Rayfield Aerondight, Herrera Riptide, Turbo-R V-Tech, Quadra Type-66 GT variant, Thorton Merrimac Warlock, and both Porsche 911 variants also received notable air-resistance revisions where their original drag prevented appropriate performance.
+
 - Bikes receive substantially more rear lateral grip, revised inertia on all axes, increased maximum tilt on sport bikes, and less twitchy tilt/lean speed. An optional bike-curves archive allows bikes to lean more naturally at lower speeds.
 
 - Together, these changes make bikes feel much more fluid and predictable instead of stiff one moment and suddenly unstable the next. Unfortunately, bike turning radius appears to be controlled by native game code rather than the exposed tuning values. Bikes may therefore still corner more widely than they realistically should, but their overall stability and responsiveness are significantly improved.
@@ -162,7 +164,7 @@ Creating and editing a custom tune
 2. Click Save As New.
 3. Enter a unique filename and confirm.
 4. Adjust the sliders.
-5. Leave Auto-save enabled to save every change automatically, or disable it and click Save manually.
+5. Auto-save is disabled by default. Enable it to save every change automatically, or leave it disabled and click Save manually.
 6. Respawn or re-enter the vehicle to test the result.
 
 Managing changes
@@ -196,13 +198,18 @@ Center of Mass & Body Rotation
 - Forward and Side Weight Transfer affect how strongly the chassis loads and unloads its tires under braking, acceleration, and cornering.
 - Turning Roll Factor changes how much the body rolls while steering.
 
-Engine and Engine Response
+Engine & Gearing
 
 - Max Torque controls overall engine output. Large changes can affect both acceleration and maximum speed.
 - Resistance affects how quickly engine speed falls and can contribute to engine braking.
 - Max RPM sets the engine's upper operating range.
 - Gear Change Time and Gear Change Cooldown control shift timing.
 - Flywheel Inertia affects engine-speed response more than the vehicle's basic traction or handling.
+- In the default Easy mode, Final Drive scales all forward gear ranges together. Moving left favors launch acceleration; moving right favors top-speed gearing.
+- Torque Decay Curve controls how quickly torque falls away through the higher gears.
+- The table below these controls previews each gear's speed range, RPM range, and torque multiplier.
+- Enable Advanced gearing mode to edit every gear directly. The first gear record is Reverse; the following records contain the forward gears.
+- Use Respawn Last Vehicle after gearing changes. The Acceleration Stopwatch can be opened from this section to measure checkpoints and top speed.
 
 Suspension
 
@@ -265,13 +272,7 @@ Braking
 - More rear braking can help rotation but may cause snap oversteer.
 - Handbrake controls handbrake torque.
 
-Individual Gears
-
-The first gear record is Reverse. The following records contain the forward gears.
-
-- Minimum and Maximum Speed influence the operating range and shifting behavior of each gear.
-- Minimum and Maximum RPM define its engine-speed range.
-- Torque Multiplier scales the torque delivered in that gear.
+Advanced gearing exposes Minimum and Maximum Speed, Minimum and Maximum RPM, and Torque Multiplier for every gear.
 
 Gear behavior is highly interconnected and is not a simple hard speed cap. Make small changes and test acceleration, shift points, and top speed after every adjustment.
 
