@@ -233,9 +233,9 @@ local PARAMS = {
     { key = "turn_roll_weak_mul", group = "CENTER OF MASS & BODY ROTATION", label = "Weak-Contact Roll Multiplier", fmt = "%.2f", absMin = 0, absMax = 10 },
     { key = "turn_roll_weak_min", group = "CENTER OF MASS & BODY ROTATION", label = "Weak-Contact Threshold Minimum", fmt = "%.2f", absMin = 0, absMax = 2 },
     { key = "turn_roll_weak_max", group = "CENTER OF MASS & BODY ROTATION", label = "Weak-Contact Threshold Maximum", fmt = "%.2f", absMin = 0, absMax = 2 },
-    { key = "max_torque",         group = "ENGINE",             label = "Max Torque",       fmt = "%.0f Nm",  absMin = 0,     absMax = 10000 },
-    { key = "resistance_torque",  group = "ENGINE",             label = "Resistance",       fmt = "%.0f Nm",  absMin = 0,     absMax = 800 },
-    { key = "max_rpm",            group = "ENGINE",             label = "Max RPM",          fmt = "%.0f",     absMin = 2000,  absMax = 16000 },
+    { key = "max_torque",         group = "ENGINE & GEARING",   label = "Max Torque",       fmt = "%.0f Nm",  absMin = 0,     absMax = 10000 },
+    { key = "resistance_torque",  group = "ENGINE & GEARING",   label = "Resistance",       fmt = "%.0f Nm",  absMin = 0,     absMax = 800 },
+    { key = "max_rpm",            group = "ENGINE & GEARING",   label = "Max RPM",          fmt = "%.0f",     absMin = 2000,  absMax = 16000 },
     { key = "susp_front_spring",  group = "SUSPENSION // FRONT", label = "Spring Rate",     fmt = "%.1f",     absMin = 0,     absMax = 500 },
     { key = "susp_front_damp",    group = "SUSPENSION // FRONT", label = "Damping",         fmt = "%.0f",     absMin = 0,     absMax = 30000 },
     { key = "susp_front_rebound", group = "SUSPENSION // FRONT", label = "Rebound",         fmt = "%.0f",     absMin = 0,     absMax = 30000 },
@@ -284,15 +284,15 @@ local PARAMS = {
     { key = "braking_friction_factor", group = "WHEEL CONTACT MODEL", label = "Braking Friction Factor", fmt = "%.2f", absMin = 0, absMax = 20 },
     { key = "differential_overshoot", group = "WHEEL CONTACT MODEL", label = "Differential Overshoot Factor", fmt = "%.2f", absMin = 0, absMax = 20 },
     { key = "braking_estimation", group = "WHEEL CONTACT MODEL", label = "Braking Estimation Factor", fmt = "%.2f", absMin = 0, absMax = 20 },
-    { key = "engine_min_rpm", group = "ENGINE RESPONSE", label = "Minimum RPM", fmt = "%.0f", absMin = 0, absMax = 10000 },
-    { key = "gear_change_time", group = "ENGINE RESPONSE", label = "Gear Change Time", fmt = "%.3f s", absMin = 0, absMax = 5 },
-    { key = "wheel_resistance_ratio", group = "ENGINE RESPONSE", label = "Wheels Resistance Ratio", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "gear_change_cooldown", group = "ENGINE RESPONSE", label = "Gear Change Cooldown", fmt = "%.3f s", absMin = 0, absMax = 10 },
-    { key = "final_gear_torque_decay", group = "ENGINE RESPONSE", label = "Final-Gear Torque Decimation", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "flywheel_inertia", group = "ENGINE RESPONSE", label = "Flywheel Inertia", fmt = "%.2f", absMin = 0, absMax = 100 },
-    { key = "reverse_direction_delay", group = "ENGINE RESPONSE", label = "Reverse Direction Delay", fmt = "%.3f s", absMin = 0, absMax = 10 },
-    { key = "fast_r1_change", group = "ENGINE RESPONSE", label = "Fast Reverse/First-Gear Change", type = "bool" },
-    { key = "force_reverse_min_rpm", group = "ENGINE RESPONSE", label = "Force Reverse RPM to Minimum", type = "bool" },
+    { key = "engine_min_rpm", group = "ENGINE & GEARING", label = "Minimum RPM", fmt = "%.0f", absMin = 0, absMax = 10000 },
+    { key = "gear_change_time", group = "ENGINE & GEARING", label = "Gear Change Time", fmt = "%.3f s", absMin = 0, absMax = 5 },
+    { key = "wheel_resistance_ratio", group = "ENGINE & GEARING", label = "Wheels Resistance Ratio", fmt = "%.2f", absMin = 0, absMax = 10 },
+    { key = "gear_change_cooldown", group = "ENGINE & GEARING", label = "Gear Change Cooldown", fmt = "%.3f s", absMin = 0, absMax = 10 },
+    { key = "final_gear_torque_decay", group = "ENGINE & GEARING", label = "Final-Gear Torque Decimation", fmt = "%.2f", absMin = 0, absMax = 10 },
+    { key = "flywheel_inertia", group = "ENGINE & GEARING", label = "Flywheel Inertia", fmt = "%.2f", absMin = 0, absMax = 100 },
+    { key = "reverse_direction_delay", group = "ENGINE & GEARING", label = "Reverse Direction Delay", fmt = "%.3f s", absMin = 0, absMax = 10 },
+    { key = "fast_r1_change", group = "ENGINE & GEARING", label = "Fast Reverse/First-Gear Change", type = "bool" },
+    { key = "force_reverse_min_rpm", group = "ENGINE & GEARING", label = "Force Reverse RPM to Minimum", type = "bool" },
     { key = "brake_front",        group = "BRAKING",            label = "Front Brake",      fmt = "%.0f Nm",  absMin = 0,     absMax = 20000 },
     { key = "brake_rear",         group = "BRAKING",            label = "Rear Brake",       fmt = "%.0f Nm",  absMin = 0,     absMax = 20000 },
     { key = "brake_handbrake",    group = "BRAKING",            label = "Handbrake",        fmt = "%.0f Nm",  absMin = 0,     absMax = 20000 },
@@ -377,7 +377,7 @@ end
 local GROUPS = {
     "MASS & DYNAMICS",
     "CENTER OF MASS & BODY ROTATION",
-    "ENGINE",
+    "ENGINE & GEARING",
     "SUSPENSION // FRONT",
     "SUSPENSION // REAR",
     "TIRES",
@@ -386,11 +386,9 @@ local GROUPS = {
     "GRIP & SLIP MODEL",
     "ROTATION & DRIFT LIMITER",
     "BRAKING",
-    "INDIVIDUAL GEARS",
     "WHEEL CONTACT MODEL",
     "ADVANCED SUSPENSION // FRONT",
     "ADVANCED SUSPENSION // REAR",
-    "ENGINE RESPONSE",
     "DRIVETRAIN & BRAKE ROLES",
     "WHEEL GEOMETRY // FRONT",
     "WHEEL GEOMETRY // REAR",
@@ -708,6 +706,16 @@ end
 
 local showOverlay = false
 local showAdvanced = false
+local easyGearing = {
+    advanced = false,
+    stopwatchOpen = false,
+    finalDrive = 1.0,
+    torqueDecay = 1.0,
+    finalDriveKey = "easy_final_drive",
+    torqueDecayKey = "easy_torque_decay",
+    versionKey = "easy_gearing_version",
+    baseline = {},
+}
 local selected = 1
 local edit = {}
 local stock = {}
@@ -722,7 +730,7 @@ local GEAR_DEBUG_LOG = "UltimateVehicleTuning.log"
 local gearRecordWriters = {}
 local pendingRespawn = nil
 local lastMountedRecordName = nil
-local autoSave = true
+local autoSave = false
 local activeTuneId = "vanilla"
 local activeTunePath = nil
 local activeTuneReadOnly = true
@@ -730,7 +738,7 @@ local presetDirty = false
 local tuneFiles = {}
 local saveAsName = "my_tune.json"
 local pendingDeleteTuneId = nil
-local metadata = { version = 2, autoSave = true, vehicles = {} }
+local metadata = { version = 2, autoSave = false, autoSaveExplicit = false, vehicles = {} }
 local gameSessionActive = false
 local loadingTunesApplied = false
 local loadingMountedTuneApplied = false
@@ -1645,8 +1653,76 @@ local function applyToVariants(veh, params)
     return okAny, lastErr
 end
 
+local function resetEasyGearBaseline(storeNeutralValues)
+    easyGearing.baseline = {}
+    for gear = 1, 8 do
+        for _, suffix in ipairs({ "min_speed", "max_speed", "min_rpm", "max_rpm", "torque" }) do
+            local key = "gear_" .. gear .. "_" .. suffix
+            easyGearing.baseline[key] = edit[key]
+        end
+    end
+    easyGearing.finalDrive = 1.0
+    easyGearing.torqueDecay = 1.0
+    if storeNeutralValues then
+        edit[easyGearing.finalDriveKey] = 1.0
+        edit[easyGearing.torqueDecayKey] = 1.0
+        edit[easyGearing.versionKey] = 2
+    end
+end
+
+local function loadEasyGearStateFromEditor()
+    local driveScale = tonumber(edit[easyGearing.finalDriveKey]) or 1.0
+    local torqueDecay = tonumber(edit[easyGearing.torqueDecayKey]) or 1.0
+    local gearingVersion = tonumber(edit[easyGearing.versionKey]) or 1
+    if driveScale <= 0 then driveScale = 1.0 end
+    if torqueDecay <= 0 then torqueDecay = 1.0 end
+
+    easyGearing.finalDrive = driveScale
+    easyGearing.torqueDecay = torqueDecay
+    easyGearing.baseline = {}
+
+    local firstCurrentTorque = nil
+    for gear = 2, 8 do
+        local torque = edit["gear_" .. gear .. "_torque"]
+        if type(torque) == "number" and torque > 0 then
+            firstCurrentTorque = torque
+            break
+        end
+    end
+
+    local decayExponent = math.max(0.05,
+        gearingVersion >= 2 and torqueDecay / driveScale or torqueDecay * driveScale)
+    local firstBaseTorque = firstCurrentTorque and firstCurrentTorque * driveScale or nil
+    for gear = 1, 8 do
+        local prefix = "gear_" .. gear .. "_"
+        easyGearing.baseline[prefix .. "min_rpm"] = edit[prefix .. "min_rpm"]
+        easyGearing.baseline[prefix .. "max_rpm"] = edit[prefix .. "max_rpm"]
+
+        local minSpeed = edit[prefix .. "min_speed"]
+        local maxSpeed = edit[prefix .. "max_speed"]
+        local torque = edit[prefix .. "torque"]
+        if gear == 1 then
+            easyGearing.baseline[prefix .. "min_speed"] = minSpeed
+            easyGearing.baseline[prefix .. "max_speed"] = maxSpeed
+            easyGearing.baseline[prefix .. "torque"] = torque
+        else
+            easyGearing.baseline[prefix .. "min_speed"] =
+                type(minSpeed) == "number" and minSpeed / driveScale or minSpeed
+            easyGearing.baseline[prefix .. "max_speed"] =
+                type(maxSpeed) == "number" and maxSpeed / driveScale or maxSpeed
+            if firstBaseTorque and type(torque) == "number" and torque > 0 then
+                easyGearing.baseline[prefix .. "torque"] = firstBaseTorque *
+                    ((torque / firstCurrentTorque) ^ (1.0 / decayExponent))
+            else
+                easyGearing.baseline[prefix .. "torque"] = torque
+            end
+        end
+    end
+end
+
 local function loadEditorFrom(params)
     edit = copyTbl(params)
+    loadEasyGearStateFromEditor()
 end
 
 local function currentVeh()
@@ -1960,9 +2036,20 @@ local function initializeTuneStorage(baseDocument)
     addPresetVehiclesToRoster(baseVehicles)
 
     local cleanSlate = metadata.version ~= 2 or type(metadata.vehicles) ~= "table"
-    local priorAutoSave = type(metadata.autoSave) == "boolean" and metadata.autoSave or true
-    if cleanSlate then metadata = { version = 2, autoSave = priorAutoSave, vehicles = {} } end
+    local autoSaveExplicit = metadata.autoSaveExplicit == true
+    local priorAutoSave = autoSaveExplicit and metadata.autoSave == true or false
+    if cleanSlate then
+        metadata = {
+            version = 2,
+            autoSave = false,
+            autoSaveExplicit = false,
+            vehicles = {},
+        }
+        priorAutoSave = false
+        autoSaveExplicit = false
+    end
     metadata.autoSave = priorAutoSave
+    metadata.autoSaveExplicit = autoSaveExplicit
     autoSave = priorAutoSave
 
     for _, veh in ipairs(VEHICLES) do
@@ -2340,14 +2427,14 @@ local function startAccelerationTimer()
         accelerationTimer.status = "No vehicle mounted"
         return
     end
-    if selectMounted and not selectMounted(true, false) then
+    local selectedVehicle = currentVeh()
+    if not selectedVehicle then
         accelerationTimer.active = false
-        accelerationTimer.status = "Could not select the mounted vehicle/tune"
+        accelerationTimer.status = "No vehicle/tune selected in the main panel"
         return
     end
     resetAccelerationTimer()
-    local selectedVehicle = currentVeh()
-    accelerationTimer.vehicleId = selectedVehicle and selectedVehicle.id or mountedRecordName()
+    accelerationTimer.vehicleId = selectedVehicle.id
     accelerationTimer.mountedVehicleId = mountedRecordName()
     accelerationTimer.tuneId = tostring(activeTuneId or VANILLA_TUNE)
     accelerationTimer.topSpeedMps = accelerationTimer.speedMps or 0
@@ -2739,16 +2826,184 @@ local function resetParam(key)
     local s = currentStock()[key]
     if s == nil then return end
     edit[key] = s
+    if key:find("^gear_%d+_") then
+        resetEasyGearBaseline(true)
+    end
     applyCurrent("Reset " .. key)
 end
 
-local function drawGroup(groupName)
-    ImGui.PushStyleColor(ImGuiCol.Header, 0.10, 0.42, 0.66, 1.0)
-    ImGui.PushStyleColor(ImGuiCol.HeaderHovered, 0.14, 0.50, 0.76, 1.0)
-    ImGui.PushStyleColor(ImGuiCol.HeaderActive, 0.08, 0.36, 0.58, 1.0)
-    local open = ImGui.CollapsingHeader(groupName, ImGuiTreeNodeFlags.DefaultOpen)
-    ImGui.PopStyleColor(3)
-    if not open then return end
+local function applyEasyGearingValues()
+    local firstTorque = nil
+    for gear = 2, 8 do
+        local torque = easyGearing.baseline["gear_" .. gear .. "_torque"]
+        if type(torque) == "number" and torque > 0 then
+            firstTorque = torque
+            break
+        end
+    end
+
+    local driveScale = math.max(0.01, easyGearing.finalDrive)
+    local decayExponent = math.max(0.05, easyGearing.torqueDecay / driveScale)
+    edit[easyGearing.finalDriveKey] = easyGearing.finalDrive
+    edit[easyGearing.torqueDecayKey] = easyGearing.torqueDecay
+    edit[easyGearing.versionKey] = 2
+    for gear = 2, 8 do
+        local prefix = "gear_" .. gear .. "_"
+        local minSpeed = easyGearing.baseline[prefix .. "min_speed"]
+        local maxSpeed = easyGearing.baseline[prefix .. "max_speed"]
+        local torque = easyGearing.baseline[prefix .. "torque"]
+
+        if type(minSpeed) == "number" then
+            edit[prefix .. "min_speed"] = minSpeed * driveScale
+        end
+        if type(maxSpeed) == "number" then
+            edit[prefix .. "max_speed"] = maxSpeed * driveScale
+        end
+        if firstTorque and type(torque) == "number" and torque > 0 then
+            local relativeTorque = torque / firstTorque
+            edit[prefix .. "torque"] =
+                (firstTorque / driveScale) * (relativeTorque ^ decayExponent)
+        end
+    end
+end
+
+local function drawGearValue(value, format)
+    if type(value) == "number" then
+        ImGui.Text(string.format(format, value))
+    else
+        ImGui.TextDisabled("--")
+    end
+end
+
+local function drawGearTable()
+    if not ImGui.BeginTable("##easy_gearing_table", 6, 0) then return end
+    ImGui.TableSetupColumn("Gear")
+    ImGui.TableSetupColumn("Low km/h")
+    ImGui.TableSetupColumn("High km/h")
+    ImGui.TableSetupColumn("Low RPM")
+    ImGui.TableSetupColumn("High RPM")
+    ImGui.TableSetupColumn("Torque")
+    ImGui.TableHeadersRow()
+
+    for gear = 1, 8 do
+        local prefix = "gear_" .. gear .. "_"
+        local hasGear = edit[prefix .. "min_speed"] ~= nil or
+            edit[prefix .. "max_speed"] ~= nil or edit[prefix .. "torque"] ~= nil
+        if hasGear then
+            ImGui.TableNextRow()
+            ImGui.TableSetColumnIndex(0)
+            ImGui.Text(gear == 1 and "Reverse" or tostring(gear - 1))
+            ImGui.TableSetColumnIndex(1)
+            local minSpeed = edit[prefix .. "min_speed"]
+            drawGearValue(type(minSpeed) == "number" and minSpeed * 3.6 or nil, "%.1f")
+            ImGui.TableSetColumnIndex(2)
+            local maxSpeed = edit[prefix .. "max_speed"]
+            drawGearValue(type(maxSpeed) == "number" and maxSpeed * 3.6 or nil, "%.1f")
+            ImGui.TableSetColumnIndex(3)
+            drawGearValue(edit[prefix .. "min_rpm"], "%.0f")
+            ImGui.TableSetColumnIndex(4)
+            drawGearValue(edit[prefix .. "max_rpm"], "%.0f")
+            ImGui.TableSetColumnIndex(5)
+            drawGearValue(edit[prefix .. "torque"], "%.3f")
+        end
+    end
+    ImGui.EndTable()
+end
+
+local function drawEasyGearingControls()
+    local width = ImGui.GetWindowContentRegionWidth()
+    local labelW = width * 0.42
+    local sliderW = math.max(120, width - labelW)
+
+    if activeTuneReadOnly then ImGui.BeginDisabled() end
+
+    ImGui.AlignTextToFramePadding()
+    ImGui.Text("Final Drive")
+    ImGui.SameLine(labelW)
+    ImGui.PushItemWidth(sliderW)
+    local finalDrive, finalDriveChanged =
+        ImGui.SliderFloat("##easy_final_drive", easyGearing.finalDrive, 0.60, 1.60, "%.2f x")
+    ImGui.PopItemWidth()
+    if finalDriveChanged then
+        easyGearing.finalDrive = finalDrive
+        applyEasyGearingValues()
+    end
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip(
+            "Lower gives stronger low gears with steeper falloff; higher gives weaker low gears with shallower falloff.")
+    end
+    if ImGui.IsItemDeactivatedAfterEdit() then
+        applyCurrent("Auto-applied easy gearing")
+    end
+
+    ImGui.AlignTextToFramePadding()
+    ImGui.Text("Torque Decay Curve")
+    ImGui.SameLine(labelW)
+    ImGui.PushItemWidth(sliderW)
+    local torqueDecay, torqueDecayChanged =
+        ImGui.SliderFloat("##easy_torque_decay", easyGearing.torqueDecay, 0.50, 1.50, "%.2f x")
+    ImGui.PopItemWidth()
+    if torqueDecayChanged then
+        easyGearing.torqueDecay = torqueDecay
+        applyEasyGearingValues()
+    end
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip("Lower keeps more torque in high gears; higher makes torque fall away faster.")
+    end
+    if ImGui.IsItemDeactivatedAfterEdit() then
+        applyCurrent("Auto-applied easy gearing")
+    end
+
+    if activeTuneReadOnly then ImGui.EndDisabled() end
+
+    ImGui.Spacing()
+    ImGui.TextDisabled(
+        "Final drive also adjusts wheel-torque leverage and automatically biases torque decay.")
+    drawGearTable()
+end
+
+local drawGroup
+
+local function drawGearingGroup()
+    if DEV_ACCELERATION_TIMER_ENABLED then
+        if ImGui.Button("Open Acceleration Stopwatch", 260, 0) then
+            easyGearing.stopwatchOpen = true
+        end
+        ImGui.SameLine()
+    end
+    if pendingRespawn then ImGui.BeginDisabled() end
+    if ImGui.Button("Respawn Last Vehicle##gearing", 200, 0) then
+        recycleLastVehicle()
+    end
+    if pendingRespawn then ImGui.EndDisabled() end
+    ImGui.TextDisabled("Vehicle must be respawned to apply gearing changes")
+    ImGui.Spacing()
+
+    local advancedValue, advancedChanged =
+        ImGui.Checkbox("Advanced gearing mode", easyGearing.advanced)
+    if advancedChanged then
+        easyGearing.advanced = advancedValue
+    end
+    ImGui.SameLine()
+    ImGui.TextDisabled(easyGearing.advanced and
+        "Directly edit every gear parameter" or "Simplified final-drive controls")
+
+    if easyGearing.advanced then
+        drawGroup("INDIVIDUAL GEARS", true)
+    else
+        drawEasyGearingControls()
+    end
+end
+
+drawGroup = function(groupName, skipHeader)
+    if not skipHeader then
+        ImGui.PushStyleColor(ImGuiCol.Header, 0.10, 0.42, 0.66, 1.0)
+        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, 0.14, 0.50, 0.76, 1.0)
+        ImGui.PushStyleColor(ImGuiCol.HeaderActive, 0.08, 0.36, 0.58, 1.0)
+        local open = ImGui.CollapsingHeader(groupName, ImGuiTreeNodeFlags.DefaultOpen)
+        ImGui.PopStyleColor(3)
+        if not open then return end
+    end
 
     local stockVals = currentStock()
     local width = ImGui.GetWindowContentRegionWidth()
@@ -2793,6 +3048,9 @@ local function drawGroup(groupName)
                     edit[def.key] = value
                 end
                 if ImGui.IsItemDeactivatedAfterEdit() then
+                    if groupName == "INDIVIDUAL GEARS" then
+                        resetEasyGearBaseline(true)
+                    end
                     applyCurrent("Auto-applied")
                 end
                 if unsaved or changed then ImGui.PopStyleColor(2) end
@@ -2814,6 +3072,22 @@ local function drawGroup(groupName)
     end
 
     if activeTuneReadOnly then ImGui.EndDisabled() end
+end
+
+local function drawEngineAndGearingGroup()
+    ImGui.PushStyleColor(ImGuiCol.Header, 0.10, 0.42, 0.66, 1.0)
+    ImGui.PushStyleColor(ImGuiCol.HeaderHovered, 0.14, 0.50, 0.76, 1.0)
+    ImGui.PushStyleColor(ImGuiCol.HeaderActive, 0.08, 0.36, 0.58, 1.0)
+    local open = ImGui.CollapsingHeader("ENGINE & GEARING", ImGuiTreeNodeFlags.DefaultOpen)
+    ImGui.PopStyleColor(3)
+    if not open then return end
+
+    ImGui.TextDisabled("ENGINE")
+    drawGroup("ENGINE & GEARING", true)
+    ImGui.Spacing()
+    ImGui.Separator()
+    ImGui.TextDisabled("GEARING")
+    drawGearingGroup()
 end
 
 local function pushWindowStyle()
@@ -2913,6 +3187,7 @@ local function drawTunePanel()
     if activeTuneReadOnly then ImGui.EndDisabled() end
     if autoChanged then
         autoSave = autoValue
+        metadata.autoSaveExplicit = true
         if autoSave and activeTuneDirty() and not activeTuneReadOnly then
             local ok, err = persistActiveTune()
             if not ok then configStatus = tostring(err) end
@@ -3065,6 +3340,19 @@ local function drawAccelerationTimer()
     end
 end
 
+local function drawAccelerationStopwatchWindow()
+    if not DEV_ACCELERATION_TIMER_ENABLED or not easyGearing.stopwatchOpen then return end
+
+    ImGui.SetNextWindowSize(640, 320, ImGuiCond.FirstUseEver)
+    if ImGui.Begin("Acceleration Stopwatch") then
+        if ImGui.Button("Close Window", 120, 0) then
+            easyGearing.stopwatchOpen = false
+        end
+        drawAccelerationTimer()
+    end
+    ImGui.End()
+end
+
 local function drawVehiclePanel()
     local veh = currentVeh()
     local preview = veh and (veh.name .. " [" .. veh.class .. "]") or "Select vehicle"
@@ -3111,7 +3399,6 @@ local function drawUI()
             drawVehiclePanel()
             ImGui.Separator()
             drawTunePanel()
-            drawAccelerationTimer()
 
             if lastError ~= "" then
                 ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.25, 0.15, 1.0)
@@ -3130,7 +3417,11 @@ local function drawUI()
                     advancedGroup = true
                 end
                 if not advancedGroup or showAdvanced then
-                    drawGroup(group)
+                    if group == "ENGINE & GEARING" then
+                        drawEngineAndGearingGroup()
+                    else
+                        drawGroup(group)
+                    end
                 end
             end
 
@@ -3156,6 +3447,13 @@ local function drawUI()
     end
     end)
     ImGui.End()
+    if ok then
+        local stopwatchOk, stopwatchErr = pcall(drawAccelerationStopwatchWindow)
+        if not stopwatchOk then
+            ok = false
+            err = stopwatchErr
+        end
+    end
     popWindowStyle()
     if not ok then error(err) end
 end
