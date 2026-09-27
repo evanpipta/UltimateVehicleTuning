@@ -1,12 +1,10 @@
-Ultimate Vehicle Tuning
+# Ultimate Vehicle Tuning
 
---- 
+**Do you hate driving in Cyberpunk 2077?**
 
-Do you hate driving in Cyberpunk 2077?
+**Have you tried other "improved" vehicle or driving mods, only to find that driving STILL feels bad no matter what?**
 
-Have you tried other "improved" vehicle or driving mods, only to find that driving STILL feels bad no matter what?
-
-Do you play driving games such as Forza Horizon and wish Cyberpunk 2077 had a similar handling feel?
+**Do you play driving games such as Forza Horizon and wish Cyberpunk 2077 had a similar handling feel?**
 
 ---
 
@@ -22,33 +20,33 @@ You can also switch any vehicle back to its untouched Vanilla setup at any time 
 
 ---
 
-The problems with vanilla driving
+## The problems with vanilla driving
 
 While making this mod, I compared Cyberpunk 2077's vehicle handling back-to-back with driving games such as Forza Horizon. I identified several reasons why vanilla driving often feels unsatisfying:
 
-1. Steering input and turn radius
+### 1. Steering input and turn radius
 
 This is probably the most noticeable problem. The base game has very slow steering input, and its speed-sensitive steering feels inconsistent compared with dedicated driving games. Vanilla steering can feel unresponsive and heavy at low speeds, yet twitchy and unpredictable at high speeds.
 
-2. Poorly balanced tire grip
+### 2. Poorly balanced tire grip
 
 Many cars have an unbalanced front-to-rear grip setup. Excessive front grip combined with insufficient rear grip can cause abrupt oversteer, while other setups produce excessive understeer and delayed directional response.
 
-3. Unrealistically low body inertia
+### 3. Unrealistically low body inertia
 
 Many vehicles have extremely low roll inertia compared with their pitch and yaw inertia. Combined with the vanilla suspension tuning, this can make cars feel light, plastic, and excessively twitchy over bumps.
 
-4. Poor suspension balance
+### 4. Poor suspension balance
 
 Spring stiffness, damping, rebound, anti-roll stiffness, weight transfer, and tire grip all interact. Poorly matched values contribute to snap oversteer and unpredictable handling. The good news is that the physics engine is capable of much better behavior; many of the problems come from how individual vehicles are tuned.
 
-5. Conservative performance
+### 5. Conservative performance
 
 Vanilla vehicles often have acceleration and top-speed tuning that is conservative for their class. Despite the UI showing an "MPH" value, vehicle and gear data use meters per second for internal calculations, and absolute speeds are much lower than the displayed number would suggest. Night City's dense, uneven streets also make real-world performance impractical for much of the vehicle roster, so the included tunes intentionally do not attempt to turn every vehicle into a realistic performance simulation.
 
 ---
 
-How the included Modded default tunes feel
+## How the included Modded default tunes feel
 
 - The handling philosophy is grounded in increased physical plausibility, but realism is not pursued at the expense of fun. The primary goal is to make every vehicle feel satisfying, smooth, responsive, and easy to control while preserving its individual character.
 
@@ -72,16 +70,16 @@ How the included Modded default tunes feel
 
 ---
 
-Requirements
+## Requirements
 
 - Cyberpunk 2077
 - Cyber Engine Tweaks (CET)
 
 ---
 
-Installing the main mod
+## Installing the main mod
 
-Manual installation:
+### Manual installation
 
 1. Install Cyber Engine Tweaks and confirm that its overlay opens in-game.
 2. Download the main Ultimate Vehicle Tuning file.
@@ -89,13 +87,13 @@ Manual installation:
 4. Allow the included folders to merge.
 5. Confirm that this file exists:
 
-   Cyberpunk 2077\bin\x64\plugins\cyber_engine_tweaks\mods\UltimateVehicleTuning\init.lua
+   `Cyberpunk 2077\bin\x64\plugins\cyber_engine_tweaks\mods\UltimateVehicleTuning\init.lua`
 
 6. Launch the game and open the CET overlay.
 
 If you use a mod manager, install the main file normally and verify that it produces the folder structure shown above.
 
-Installing the optional bike curves
+### Installing the optional bike curves
 
 The optional bike-curves archive is distributed as a separate download on the same Nexus Mods page.
 
@@ -103,7 +101,7 @@ The optional bike-curves archive is distributed as a separate download on the sa
 2. Extract it into your Cyberpunk 2077 game folder.
 3. Confirm that the archive is installed at:
 
-   Cyberpunk 2077\archive\pc\mod\UltimateVehicleTuning_Curves.archive
+   `Cyberpunk 2077\archive\pc\mod\UltimateVehicleTuning_Curves.archive`
 
 The optional file overrides the relevant vanilla bike curves globally. It works alongside the main mod but is not required for the tuning UI or the included vehicle tunes.
 
@@ -111,15 +109,15 @@ Restart the game after installing or removing the optional archive.
 
 ---
 
-Uninstalling
+## Uninstalling
 
 1. Delete:
 
-   Cyberpunk 2077\bin\x64\plugins\cyber_engine_tweaks\mods\UltimateVehicleTuning
+   `Cyberpunk 2077\bin\x64\plugins\cyber_engine_tweaks\mods\UltimateVehicleTuning`
 
 2. If you installed the optional bike curves, also delete:
 
-   Cyberpunk 2077\archive\pc\mod\UltimateVehicleTuning_Curves.archive
+   `Cyberpunk 2077\archive\pc\mod\UltimateVehicleTuning_Curves.archive`
 
 The mod does not permanently alter your save file or the game's original vehicle records. Its TweakDB changes exist only while the mod is loaded, so vehicles will return to their vanilla tuning after the mod is removed and the game is restarted.
 
@@ -127,26 +125,26 @@ Custom tunes are stored inside the UltimateVehicleTuning mod folder. Back up tha
 
 ---
 
-Using the mod in-game
+## Using the mod in-game
 
-Opening the UI
+### Opening the UI
 
 1. Load a saved game.
 2. Open the Cyber Engine Tweaks overlay using your configured CET key.
 3. Open the Ultimate Vehicle Tuning window.
 
-Selecting a vehicle
+### Selecting a vehicle
 
 - Choose a vehicle from the Vehicle to Edit list.
 - Click Use Current Vehicle to select the vehicle you are currently driving.
 - Click Spawn Selected Vehicle to spawn the vehicle selected in the editor, even if V does not own it.
 - Click Respawn Last Vehicle to remove and respawn the last vehicle you used.
 
-Applying changes
+### Applying changes
 
 Exit and re-enter the vehicle or use Respawn Last Vehicle after changing a tune to apply the changes.
 
-Choosing a tune
+### Choosing a tune
 
 Each vehicle has its own tune selection:
 
@@ -156,13 +154,13 @@ Each vehicle has its own tune selection:
 
 The selected tune is remembered separately for every vehicle. Once you choose a tune, the mod will continue loading it for that vehicle until you select another one.
 
-Unknown traffic vehicles
+### Unknown traffic vehicles
 
 NPC traffic variants and police vehicles are not all included in the game's normal player-vehicle list. At startup, the mod finds non-player car and truck records and applies a conservative generic Modded default directly in memory.
 
 The generated fallback improves steering response, uses safe speed-sensitive steering values, reduces and bounds weight transfer, sets turning roll to 0.65, and sets roll inertia to the midpoint of each vehicle's stock pitch and yaw inertia. These records stay hidden from the normal vehicle list; a mounted traffic vehicle can still be inspected as using "Generic modded default." The records successfully updated are written to UltimateVehicleTuning_TrafficVehicles.log.
 
-Creating and editing a custom tune
+### Creating and editing a custom tune
 
 1. Select the vehicle and starting tune you want.
 2. Click Save As New.
@@ -171,7 +169,7 @@ Creating and editing a custom tune
 5. Auto-save is disabled by default. Enable it to save every change automatically, or leave it disabled and click Save manually.
 6. Respawn or re-enter the vehicle to test the result.
 
-Managing changes
+### Managing changes
 
 - Reset beside a parameter restores that parameter to its Vanilla value.
 - Discard Changes reloads the active tune from disk.
@@ -179,21 +177,21 @@ Managing changes
 - Delete permanently removes the selected custom tune. Vanilla and Modded default cannot be deleted.
 - Selecting Vanilla is the quickest way to compare your tune against the original vehicle.
 
-Tip: Change one system at a time and test it before continuing. Vehicle parameters interact heavily, so changing many unrelated values at once can make it difficult to identify what helped or hurt.
+> **Tip:** Change one system at a time and test it before continuing. Vehicle parameters interact heavily, so changing many unrelated values at once can make it difficult to identify what helped or hurt.
 
 ---
 
-Tuning guide
+## Tuning guide
 
 This section covers the most useful controls. The advanced sections expose many additional values, but most tunes can be created with the parameters below.
 
-Mass & Dynamics
+### Mass & Dynamics
 
 - Total Mass and Chassis Mass affect how heavy the vehicle behaves. Keep them equal unless you have a specific reason not to.
 - Air Resistance primarily affects acceleration and maximum speed at the high end.
 - Increasing mass can make a vehicle feel more substantial but also reduces acceleration and makes suspension tuning more demanding.
 
-Center of Mass & Body Rotation
+### Center of Mass & Body Rotation
 
 - COM Z controls center-of-mass height. Lower values generally reduce weight transfer and body roll; higher values make the chassis feel more active.
 - Pitch, Roll, and Yaw Inertia control how strongly the body resists rotation on each axis.
@@ -202,7 +200,7 @@ Center of Mass & Body Rotation
 - Forward and Side Weight Transfer affect how strongly the chassis loads and unloads its tires under braking, acceleration, and cornering.
 - Turning Roll Factor changes how much the body rolls while steering.
 
-Engine & Gearing
+### Engine & Gearing
 
 - Max Torque controls overall engine output. Large changes can affect both acceleration and maximum speed.
 - Resistance affects how quickly engine speed falls and can contribute to engine braking.
@@ -215,7 +213,7 @@ Engine & Gearing
 - Enable Advanced gearing mode to edit every gear directly. The first gear record is Reverse; the following records contain the forward gears.
 - Use Respawn Last Vehicle after gearing changes. The Acceleration Stopwatch can be opened from this section to measure checkpoints and top speed.
 
-Suspension
+### Suspension
 
 - Spring Rate controls how much force is required to compress the suspension.
 - Damping controls compression movement, while Rebound controls how quickly the suspension extends again.
@@ -225,7 +223,7 @@ Suspension
 - If a vehicle feels floaty, increase damping and spring stiffness gradually rather than changing either one drastically.
 - If it skips across bumps and loses grip, the suspension may be too stiff or over-damped.
 
-Tires
+### Tires
 
 Front and Rear Lateral Grip are among the most important handling controls:
 
@@ -237,13 +235,13 @@ Longitudinal Grip primarily affects acceleration and braking traction.
 
 Base Friction and Rolling Resistance are lower-level tire parameters. They usually do not need large adjustments.
 
-Steering
+### Steering
 
 - Turn Speed+ controls how quickly steering is added.
 - Turn Speed- controls how quickly the wheels return toward center.
 - Steering Assist maps to the game's perfect-steering assistance. Extreme values can make steering feel artificial.
 
-Speed-Sensitive Steering
+### Speed-Sensitive Steering
 
 This is the most useful section for changing how cars respond at different speeds:
 
@@ -257,11 +255,11 @@ If a car feels unresponsive, first examine its maximum angle, angle multipliers,
 
 These car steering parameters may change the visible front wheel on bikes without meaningfully changing the bike's physical turning radius.
 
-Grip & Slip Model
+### Grip & Slip Model
 
 These values control when the tire model begins calculating slip and how strongly the underlying slip curves are applied. They are advanced controls; tune basic lateral and longitudinal grip first.
 
-Rotation & Drift Limiter
+### Rotation & Drift Limiter
 
 - Maximum Angular Speed limits how quickly the vehicle can rotate.
 - Drift Rotation Limit and its speed thresholds influence rotation while sliding.
@@ -269,7 +267,7 @@ Rotation & Drift Limiter
 
 If a vehicle refuses to rotate despite having enough grip and steering angle, test these limits. Very high limits can make spins violent and difficult to recover.
 
-Braking
+### Braking
 
 - Front Brake and Rear Brake set braking torque per axle.
 - More front bias is generally stable but can promote understeer under braking.
@@ -285,25 +283,25 @@ Internal speed values are in meters per second:
 - 1 m/s = 3.6 km/h
 - 1 m/s = approximately 2.237 mph
 
-Dynamic Rear Grip and Handbrake Grip Helper
+### Dynamic Rear Grip and Handbrake Grip Helper
 
 These sections control assistance applied when the rear tires begin slipping or when the handbrake is used. They are useful for making oversteer progressive instead of abrupt.
 
-Traction & Acceleration Helpers
+### Traction & Acceleration Helpers
 
 These include uphill compensation and low-speed acceleration assistance. Large values can produce unrealistic launch performance, so adjust them conservatively.
 
-Downforce & Air Control
+### Downforce & Air Control
 
 - Ground Factor increases the high-speed force keeping the vehicle planted.
 - Minimum and Maximum Speed define the range over which that effect builds.
 - Air-control sections affect pitch, yaw, and roll while the vehicle is airborne, not normal grounded steering.
 
-Burnout & Launch Grip
+### Burnout & Launch Grip
 
 These controls affect driven-wheel slip, launch assistance, burnout behavior, and the transition between wheelspin and grip. They are useful for powerful cars that either bog down or launch with excessive wheelspin.
 
-Bike Dynamics
+### Bike Dynamics
 
 - Maximum Tilt controls the allowed visual lean angle.
 - Tilt Speed and Tilt Return Speed control how quickly the bike leans and returns upright.
@@ -311,13 +309,13 @@ Bike Dynamics
 
 Some bike lean controls are primarily visual. The game's native bike controller appears to calculate physical turning radius separately, so additional lean does not necessarily produce a tighter turn.
 
-Wheel Geometry, Water, Flat Tires, and other advanced sections
+### Wheel Geometry, Water, Flat Tires, and other advanced sections
 
 These sections expose physical wheel dimensions, axle roles, buoyancy, damaged-tire behavior, and other specialized systems. They are included for experimentation but are rarely necessary for a normal handling tune.
 
 ---
 
-Credits
+## Credits
 
 Vehicle Physics Config was the original inspiration for this project.
 
