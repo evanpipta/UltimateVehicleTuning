@@ -1,2 +1,7 @@
 *.log
 release/
+
+# Ignore user-created tunes while retaining shipped presets.
+tunes/**/*.json
+!tunes/**/modded_default.json
+!tunes/**/Stage 3.json

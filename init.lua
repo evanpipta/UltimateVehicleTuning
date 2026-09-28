@@ -951,6 +951,35 @@ local function ensureVehicleTuneDirectory(vehId)
     return path ~= nil and ensureDirectory(path)
 end
 
+-- CET can read and write files in the mod sandbox, but creating a new
+-- directory through os.execute is not reliable on every installation. Bundled
+-- vehicles already have tune directories; dynamically discovered mod vehicles
+-- do not. Fall back to a vehicle-namespaced file in the existing tunes root.
+local function flatTunePrefix(vehId)
+    local folder = vehicleFolderName(vehId)
+    return folder and ("__custom__" .. folder .. "__") or nil
+end
+
+local function flatTunePath(vehId, filename)
+    local prefix = flatTunePrefix(vehId)
+    if not prefix or not filename then return nil end
+    return TUNES_ROOT .. "/" .. prefix .. filename
+end
+
+local function tuneFilePath(vehId, filename)
+    local tuneDir = vehicleTuneDir(vehId)
+    if not tuneDir or not filename then return nil end
+
+    local nestedPath = tuneDir .. "/" .. filename
+    local fallbackPath = flatTunePath(vehId, filename)
+    if fileExists(nestedPath) then return nestedPath end
+    if fallbackPath and fileExists(fallbackPath) then return fallbackPath end
+
+    local ok, entries = pcall(function() return dir(tuneDir) end)
+    if ok and type(entries) == "table" then return nestedPath end
+    return fallbackPath
+end
+
 local function countEditedParameters()
     local veh = VEHICLES[selected]
     if not veh then return 0 end
@@ -1045,11 +1074,30 @@ local function refreshTuneFiles(vehId)
         end
     end
 
+    local prefix = flatTunePrefix(vehId)
+    local rootOk, rootEntries = pcall(function() return dir(TUNES_ROOT) end)
+    if prefix and rootOk and type(rootEntries) == "table" then
+        for _, entry in ipairs(rootEntries) do
+            local entryName, isFile
+            if type(entry) == "table" then
+                entryName = entry.name
+                isFile = entry.type == nil or entry.type == "file"
+            elseif type(entry) == "string" then
+                entryName = entry
+                isFile = true
+            end
+            if isFile and type(entryName) == "string" and
+                entryName:sub(1, #prefix):lower() == prefix:lower() then
+                addName(entryName:sub(#prefix + 1))
+            end
+        end
+    end
+
     table.sort(names, function(a, b) return a:lower() < b:lower() end)
     tuneFiles = {
         { id = VANILLA_TUNE, label = "Vanilla", readOnly = true, vanilla = true },
     }
-    local defaultPath = tuneDir and (tuneDir .. "/" .. MODDED_DEFAULT_TUNE .. ".json") or nil
+    local defaultPath = tuneFilePath(vehId, MODDED_DEFAULT_TUNE .. ".json")
     local defaultData = defaultPath and loadJSON(defaultPath) or nil
     if validTuneDocument(defaultData, vehId) then
         table.insert(tuneFiles, {
@@ -1069,8 +1117,8 @@ local function refreshTuneFiles(vehId)
 
     local validIndex = {}
     for _, name in ipairs(names) do
-        local path = tuneDir .. "/" .. name
-        local data = loadJSON(path)
+        local path = tuneFilePath(vehId, name)
+        local data = path and loadJSON(path) or nil
         if validTuneDocument(data, vehId) then
             table.insert(tuneFiles, {
                 id = name,
@@ -1766,6 +1814,15 @@ local function addPresetVehiclesToRoster(presetVehicles)
     for vehId in pairs(presetVehicles or {}) do ensureVehicleInRoster(vehId) end
 end
 
+local function addCustomTuneVehiclesToRoster()
+    for vehId, state in pairs(metadata.vehicles or {}) do
+        if type(state) == "table" and type(state.tuneIndex) == "table" and
+            #state.tuneIndex > 0 then
+            ensureVehicleInRoster(vehId)
+        end
+    end
+end
+
 local function captureVehicleStock(veh)
     if not veh then return nil end
     if stock[veh.id] and next(stock[veh.id]) then return stock[veh.id] end
@@ -2058,9 +2115,8 @@ local function initializeTuneStorage(baseDocument)
         local values = baseVehicles[veh.id]
         local hasDefault = false
         if values and ensureVehicleTuneDirectory(veh.id) then
-            local tuneDir = vehicleTuneDir(veh.id)
-            if tuneDir then
-                local path = tuneDir .. "/" .. MODDED_DEFAULT_TUNE .. ".json"
+            local path = tuneFilePath(veh.id, MODDED_DEFAULT_TUNE .. ".json")
+            if path then
                 local document = { version = 1, vehicleId = veh.id, values = values }
                 local existing = loadJSON(path)
                 local existingValues = type(existing) == "table" and existing.values or nil
@@ -2185,11 +2241,18 @@ local function saveAsTune(rawName)
         configStatus = "Use a simple tune name without folders or '..'."
         return false
     end
-    if not ensureVehicleTuneDirectory(veh.id) then
-        configStatus = "Could not create the tune folder for " .. veh.name
+    if not ensureDirectory(TUNES_ROOT) then
+        configStatus = "Could not access the tune storage folder."
         return false
     end
-    local path = vehicleTuneDir(veh.id) .. "/" .. filename
+    -- Prefer the normal per-vehicle directory. If CET cannot create one for a
+    -- newly discovered mod vehicle, tuneFilePath uses the flat fallback.
+    ensureVehicleTuneDirectory(veh.id)
+    local path = tuneFilePath(veh.id, filename)
+    if not path then
+        configStatus = "Could not resolve a tune path for " .. veh.name
+        return false
+    end
     if fileExists(path) then
         configStatus = filename .. " already exists. Select it and use Save."
         return false
@@ -2221,12 +2284,11 @@ local function deleteActiveTune()
     end
 
     local filename = safeTuneFilename(activeTuneId)
-    local tuneDir = vehicleTuneDir(veh.id)
-    if not filename or not tuneDir then
+    local expectedPath = filename and tuneFilePath(veh.id, filename) or nil
+    if not expectedPath then
         configStatus = "Delete failed: invalid tune path."
         return false
     end
-    local expectedPath = tuneDir .. "/" .. filename
     if activeTunePath:lower() ~= expectedPath:lower() then
         configStatus = "Delete failed: tune path is outside this vehicle's folder."
         return false
@@ -2715,8 +2777,8 @@ local function applyPersistedTuneBeforeVehicleAttach(recordName)
     else
         filename = safeTuneFilename(state.activeTune)
     end
-    local tuneDir = vehicleTuneDir(veh.id)
-    local document = filename and tuneDir and loadJSON(tuneDir .. "/" .. filename) or nil
+    local path = filename and tuneFilePath(veh.id, filename) or nil
+    local document = path and loadJSON(path) or nil
     if not validTuneDocument(document, veh.id) then
         print("[UltimateVehicleTuning] Could not preload selected tune \"" ..
             tostring(state.activeTune) .. "\" for " .. veh.id)
@@ -3476,6 +3538,7 @@ registerForEvent("onInit", function()
     removeLegacyGenericTrafficMetadata()
     local baseDocument = loadJSON(BASE_CONFIG_FILE)
     local cleanSlate = initializeTuneStorage(baseDocument)
+    addCustomTuneVehiclesToRoster()
     sortVehicleRosterByClass()
     captureSessionStock()
     prepareGenericTrafficDefaults()

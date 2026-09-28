@@ -29,10 +29,18 @@ function Test-ExcludedFile {
     return (
         $normalized -eq ".gitignore" -or
         $normalized -eq "db.sqlite3" -or
+        $normalized -eq "NEXUS_DESCRIPTION.txt" -or
         $normalized -eq $scriptName -or
         $normalized.StartsWith(".git\", [StringComparison]::OrdinalIgnoreCase) -or
         $normalized.StartsWith(".github\", [StringComparison]::OrdinalIgnoreCase) -or
         $normalized.StartsWith("release\", [StringComparison]::OrdinalIgnoreCase) -or
+        $normalized.StartsWith("tunes\__custom__", [StringComparison]::OrdinalIgnoreCase) -or
+        (
+            $normalized.StartsWith("tunes\", [StringComparison]::OrdinalIgnoreCase) -and
+            $fileName.EndsWith(".json", [StringComparison]::OrdinalIgnoreCase) -and
+            $fileName -ine "modded_default.json" -and
+            $fileName -ine "Stage 3.json"
+        ) -or
         $fileName.EndsWith(".log", [StringComparison]::OrdinalIgnoreCase)
     )
 }
