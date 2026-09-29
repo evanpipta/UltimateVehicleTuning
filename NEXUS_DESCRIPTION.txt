@@ -187,6 +187,7 @@ The generated fallback improves steering response, uses safe speed-sensitive ste
 [*]Reset beside a parameter restores that parameter to its Vanilla value.
 [*]Discard Changes reloads the active tune from disk.
 [*]Save writes the current values to the active custom tune.
+[*]Copy to Other Vehicle creates a separately named copy of the current tune for another vehicle without activating it.
 [*]Delete permanently removes the selected custom tune. Vanilla and Modded default cannot be deleted.
 [*]Selecting Vanilla is the quickest way to compare your tune against the original vehicle.
 [/list]

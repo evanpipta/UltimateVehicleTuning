@@ -737,6 +737,7 @@ local activeTuneReadOnly = true
 local presetDirty = false
 local tuneFiles = {}
 local saveAsName = "my_tune.json"
+local copyTuneState = { name = "copied_tune.json", targetIndex = nil }
 local pendingDeleteTuneId = nil
 local metadata = { version = 2, autoSave = false, autoSaveExplicit = false, vehicles = {} }
 local gameSessionActive = false
@@ -2275,6 +2276,77 @@ local function saveAsTune(rawName)
     return loadTune(filename, true)
 end
 
+copyTuneState.firstTarget = function()
+    for index, veh in ipairs(VEHICLES) do
+        if index ~= selected and not veh.hidden then return index end
+    end
+    return nil
+end
+
+copyTuneState.validTarget = function(index)
+    local veh = type(index) == "number" and VEHICLES[index] or nil
+    return veh ~= nil and index ~= selected and not veh.hidden
+end
+
+copyTuneState.copyToVehicle = function(targetIndex, rawName)
+    local sourceVeh = currentVeh()
+    local targetVeh = copyTuneState.validTarget(targetIndex) and VEHICLES[targetIndex] or nil
+    local filename = safeTuneFilename(rawName)
+    if not sourceVeh or not targetVeh then
+        configStatus = "Select another vehicle to copy this tune to."
+        return false
+    end
+    if not filename then
+        configStatus = "Use a simple tune name without folders or '..'."
+        return false
+    end
+    if not ensureDirectory(TUNES_ROOT) then
+        configStatus = "Could not access the tune storage folder."
+        return false
+    end
+
+    ensureVehicleTuneDirectory(targetVeh.id)
+    local path = tuneFilePath(targetVeh.id, filename)
+    if not path then
+        configStatus = "Could not resolve a tune path for " .. targetVeh.name
+        return false
+    end
+    if fileExists(path) then
+        configStatus = filename .. " already exists for " .. targetVeh.name
+        return false
+    end
+
+    local ok, err = saveJSON(path, {
+        version = 1,
+        vehicleId = targetVeh.id,
+        values = copyTbl(edit),
+    })
+    if not ok then
+        configStatus = "Copy failed: " .. tostring(err)
+        return false
+    end
+
+    local state = vehicleMetadata(targetVeh.id)
+    local indexed = false
+    for _, name in ipairs(state.tuneIndex) do
+        if tostring(name):lower() == filename:lower() then
+            indexed = true
+            break
+        end
+    end
+    if not indexed then table.insert(state.tuneIndex, filename) end
+
+    local metadataOk, metadataErr = persistMetadata()
+    if metadataOk then
+        configStatus = "Copied current tune to " .. targetVeh.name ..
+            " as " .. filename:gsub("%.json$", "")
+    else
+        configStatus = "Tune copied, but metadata could not be saved: " ..
+            tostring(metadataErr)
+    end
+    return true
+end
+
 local function deleteActiveTune()
     local veh = currentVeh()
     if not veh or activeTuneReadOnly or not activeTunePath or
@@ -2936,7 +3008,10 @@ local function applyEasyGearingValues()
     end
 end
 
-local function drawGearValue(value, format)
+UVT = UVT or {}
+UVT.UI = UVT.UI or {}
+
+UVT.UI.drawGearValue = function(value, format)
     if type(value) == "number" then
         ImGui.Text(string.format(format, value))
     else
@@ -2944,7 +3019,7 @@ local function drawGearValue(value, format)
     end
 end
 
-local function drawGearTable()
+UVT.UI.drawGearTable = function()
     if not ImGui.BeginTable("##easy_gearing_table", 6, 0) then return end
     ImGui.TableSetupColumn("Gear")
     ImGui.TableSetupColumn("Low km/h")
@@ -2964,22 +3039,22 @@ local function drawGearTable()
             ImGui.Text(gear == 1 and "Reverse" or tostring(gear - 1))
             ImGui.TableSetColumnIndex(1)
             local minSpeed = edit[prefix .. "min_speed"]
-            drawGearValue(type(minSpeed) == "number" and minSpeed * 3.6 or nil, "%.1f")
+            UVT.UI.drawGearValue(type(minSpeed) == "number" and minSpeed * 3.6 or nil, "%.1f")
             ImGui.TableSetColumnIndex(2)
             local maxSpeed = edit[prefix .. "max_speed"]
-            drawGearValue(type(maxSpeed) == "number" and maxSpeed * 3.6 or nil, "%.1f")
+            UVT.UI.drawGearValue(type(maxSpeed) == "number" and maxSpeed * 3.6 or nil, "%.1f")
             ImGui.TableSetColumnIndex(3)
-            drawGearValue(edit[prefix .. "min_rpm"], "%.0f")
+            UVT.UI.drawGearValue(edit[prefix .. "min_rpm"], "%.0f")
             ImGui.TableSetColumnIndex(4)
-            drawGearValue(edit[prefix .. "max_rpm"], "%.0f")
+            UVT.UI.drawGearValue(edit[prefix .. "max_rpm"], "%.0f")
             ImGui.TableSetColumnIndex(5)
-            drawGearValue(edit[prefix .. "torque"], "%.3f")
+            UVT.UI.drawGearValue(edit[prefix .. "torque"], "%.3f")
         end
     end
     ImGui.EndTable()
 end
 
-local function drawEasyGearingControls()
+UVT.UI.drawEasyGearingControls = function()
     local width = ImGui.GetWindowContentRegionWidth()
     local labelW = width * 0.42
     local sliderW = math.max(120, width - labelW)
@@ -3028,12 +3103,10 @@ local function drawEasyGearingControls()
     ImGui.Spacing()
     ImGui.TextDisabled(
         "Final drive also adjusts wheel-torque leverage and automatically biases torque decay.")
-    drawGearTable()
+    UVT.UI.drawGearTable()
 end
 
-local drawGroup
-
-local function drawGearingGroup()
+UVT.UI.drawGearingGroup = function()
     if ACCELERATION_TIMER_ENABLED then
         if ImGui.Button("Open Acceleration Stopwatch", 260, 0) then
             easyGearing.stopwatchOpen = true
@@ -3058,13 +3131,13 @@ local function drawGearingGroup()
         "Directly edit every gear parameter" or "Simplified final-drive controls")
 
     if easyGearing.advanced then
-        drawGroup("INDIVIDUAL GEARS", true)
+        UVT.UI.drawGroup("INDIVIDUAL GEARS", true)
     else
-        drawEasyGearingControls()
+        UVT.UI.drawEasyGearingControls()
     end
 end
 
-drawGroup = function(groupName, skipHeader)
+UVT.UI.drawGroup = function(groupName, skipHeader)
     if not skipHeader then
         ImGui.PushStyleColor(ImGuiCol.Header, 0.10, 0.42, 0.66, 1.0)
         ImGui.PushStyleColor(ImGuiCol.HeaderHovered, 0.14, 0.50, 0.76, 1.0)
@@ -3143,7 +3216,7 @@ drawGroup = function(groupName, skipHeader)
     if activeTuneReadOnly then ImGui.EndDisabled() end
 end
 
-local function drawEngineAndGearingGroup()
+UVT.UI.drawEngineAndGearingGroup = function()
     ImGui.PushStyleColor(ImGuiCol.Header, 0.10, 0.42, 0.66, 1.0)
     ImGui.PushStyleColor(ImGuiCol.HeaderHovered, 0.14, 0.50, 0.76, 1.0)
     ImGui.PushStyleColor(ImGuiCol.HeaderActive, 0.08, 0.36, 0.58, 1.0)
@@ -3152,14 +3225,14 @@ local function drawEngineAndGearingGroup()
     if not open then return end
 
     ImGui.TextDisabled("ENGINE")
-    drawGroup("ENGINE & GEARING", true)
+    UVT.UI.drawGroup("ENGINE & GEARING", true)
     ImGui.Spacing()
     ImGui.Separator()
     ImGui.TextDisabled("GEARING")
-    drawGearingGroup()
+    UVT.UI.drawGearingGroup()
 end
 
-local function pushWindowStyle()
+UVT.UI.pushWindowStyle = function()
     ImGui.PushStyleColor(ImGuiCol.WindowBg, 0.05, 0.06, 0.08, 0.96)
     ImGui.PushStyleColor(ImGuiCol.TitleBg, 0.08, 0.10, 0.14, 1.0)
     ImGui.PushStyleColor(ImGuiCol.TitleBgActive, 0.10, 0.16, 0.22, 1.0)
@@ -3176,12 +3249,12 @@ local function pushWindowStyle()
     ImGui.PushStyleVar(ImGuiStyleVar.GrabRounding, 3)
 end
 
-local function popWindowStyle()
+UVT.UI.popWindowStyle = function()
     ImGui.PopStyleVar(2)
     ImGui.PopStyleColor(12)
 end
 
-local function drawTunePanel()
+UVT.UI.drawTunePanel = function()
     ImGui.TextDisabled("TUNE")
 
     ImGui.SameLine()
@@ -3219,6 +3292,7 @@ local function drawTunePanel()
         ImGui.OpenPopup("Save tune as###save_as_confirmation")
     end
     ImGui.SameLine()
+
     if activeTuneReadOnly then ImGui.BeginDisabled() end
     if ImGui.Button("Save", 100, 0) then
         local ok, err = persistActiveTune()
@@ -3250,6 +3324,15 @@ local function drawTunePanel()
     end
     if canDeleteTune then ImGui.PopStyleColor(3) end
     if not canDeleteTune then ImGui.EndDisabled() end
+
+    ImGui.SameLine()
+    if ImGui.Button("Copy To Vehicle", 180, 0) then
+        if not copyTuneState.validTarget(copyTuneState.targetIndex) then
+            copyTuneState.targetIndex = copyTuneState.firstTarget()
+        end
+        ImGui.OpenPopup("Copy tune to vehicle###copy_tune_confirmation")
+    end
+
     ImGui.SameLine()
     if activeTuneReadOnly then ImGui.BeginDisabled() end
     local autoValue, autoChanged = ImGui.Checkbox("Auto-save", autoSave)
@@ -3274,6 +3357,55 @@ local function drawTunePanel()
         if ImGui.Button("Confirm", 100, 0) then
             if saveAsTune(saveAsName) then ImGui.CloseCurrentPopup() end
         end 
+        ImGui.SameLine()
+        if ImGui.Button("Cancel", 100, 0) then
+            ImGui.CloseCurrentPopup()
+        end
+        ImGui.EndPopup()
+    end
+
+    if ImGui.BeginPopup("Copy tune to vehicle###copy_tune_confirmation") then
+        ImGui.Text("Copy the current tune to:")
+        ImGui.SetNextItemWidth(520)
+        local targetVeh = copyTuneState.validTarget(copyTuneState.targetIndex) and
+            VEHICLES[copyTuneState.targetIndex] or nil
+        local targetPreview = targetVeh and
+            (targetVeh.name .. " [" .. targetVeh.class .. "] - " .. targetVeh.id) or
+            "Select another vehicle"
+        if ImGui.BeginCombo("##copy_tune_target", targetPreview,
+            ImGuiComboFlags.HeightLargest) then
+            local lastClass = nil
+            for index, veh in ipairs(VEHICLES) do
+                if index ~= selected and not veh.hidden then
+                    if veh.class ~= lastClass then
+                        if lastClass ~= nil then ImGui.Separator() end
+                        ImGui.TextDisabled(veh.class)
+                        lastClass = veh.class
+                    end
+                    local isTarget = index == copyTuneState.targetIndex
+                    local label = (isTarget and "> " or "") .. veh.name ..
+                        " - " .. veh.id
+                    if ImGui.Selectable(label, false) then
+                        copyTuneState.targetIndex = index
+                    end
+                end
+            end
+            ImGui.EndCombo()
+        end
+
+        ImGui.Text("New tune name:")
+        ImGui.SetNextItemWidth(520)
+        copyTuneState.name = ImGui.InputText("##copy_tune_name", copyTuneState.name, 96)
+        ImGui.TextDisabled("The copied tune will be created but not automatically activated.")
+        ImGui.Separator()
+        local canCopy = copyTuneState.validTarget(copyTuneState.targetIndex)
+        if not canCopy then ImGui.BeginDisabled() end
+        if ImGui.Button("Copy", 100, 0) then
+            if copyTuneState.copyToVehicle(copyTuneState.targetIndex, copyTuneState.name) then
+                ImGui.CloseCurrentPopup()
+            end
+        end
+        if not canCopy then ImGui.EndDisabled() end
         ImGui.SameLine()
         if ImGui.Button("Cancel", 100, 0) then
             ImGui.CloseCurrentPopup()
@@ -3340,7 +3472,7 @@ local function drawTunePanel()
     ImGui.PopStyleColor()
 end
 
-local function drawAccelerationTimer()
+UVT.UI.drawAccelerationTimer = function()
     if not ACCELERATION_TIMER_ENABLED then return end
 
     ImGui.Separator()
@@ -3409,7 +3541,7 @@ local function drawAccelerationTimer()
     end
 end
 
-local function drawAccelerationStopwatchWindow()
+UVT.UI.drawAccelerationStopwatchWindow = function()
     if not ACCELERATION_TIMER_ENABLED or not easyGearing.stopwatchOpen then return end
 
     ImGui.SetNextWindowSize(640, 320, ImGuiCond.FirstUseEver)
@@ -3417,12 +3549,12 @@ local function drawAccelerationStopwatchWindow()
         if ImGui.Button("Close Window", 120, 0) then
             easyGearing.stopwatchOpen = false
         end
-        drawAccelerationTimer()
+        UVT.UI.drawAccelerationTimer()
     end
     ImGui.End()
 end
 
-local function drawVehiclePanel()
+UVT.UI.drawVehiclePanel = function()
     local veh = currentVeh()
     local preview = veh and (veh.name .. " [" .. veh.class .. "]") or "Select vehicle"
 
@@ -3456,18 +3588,18 @@ local function drawVehiclePanel()
     -- ImGui.TextWrapped(statusMessage)
 end
 
-local function drawUI()
+UVT.UI.draw = function()
     ImGui.SetNextWindowSize(720, 820, ImGuiCond.FirstUseEver)
-    pushWindowStyle()
+    UVT.UI.pushWindowStyle()
     local ok, err = pcall(function()
     if ImGui.Begin("Ultimate Vehicle Tuning") then
         if not tdbReady then
             ImGui.TextWrapped("Waiting for TweakDB... reload CET mods after the session has started.")
         else
             ImGui.Separator()
-            drawVehiclePanel()
+            UVT.UI.drawVehiclePanel()
             ImGui.Separator()
-            drawTunePanel()
+            UVT.UI.drawTunePanel()
 
             if lastError ~= "" then
                 ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.25, 0.15, 1.0)
@@ -3487,9 +3619,9 @@ local function drawUI()
                 end
                 if not advancedGroup or showAdvanced then
                     if group == "ENGINE & GEARING" then
-                        drawEngineAndGearingGroup()
+                        UVT.UI.drawEngineAndGearingGroup()
                     else
-                        drawGroup(group)
+                        UVT.UI.drawGroup(group)
                     end
                 end
             end
@@ -3517,13 +3649,13 @@ local function drawUI()
     end)
     ImGui.End()
     if ok then
-        local stopwatchOk, stopwatchErr = pcall(drawAccelerationStopwatchWindow)
+        local stopwatchOk, stopwatchErr = pcall(UVT.UI.drawAccelerationStopwatchWindow)
         if not stopwatchOk then
             ok = false
             err = stopwatchErr
         end
     end
-    popWindowStyle()
+    UVT.UI.popWindowStyle()
     if not ok then error(err) end
 end
 
@@ -3639,7 +3771,7 @@ end)
 
 registerForEvent("onDraw", function()
     if not showOverlay then return end
-    local ok, err = pcall(drawUI)
+    local ok, err = pcall(UVT.UI.draw)
     if not ok then
         lastError = tostring(err)
         print("[VPC] UI error: " .. lastError)
