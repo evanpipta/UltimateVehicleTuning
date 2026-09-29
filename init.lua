@@ -381,6 +381,7 @@ local GROUPS = {
     "SUSPENSION // FRONT",
     "SUSPENSION // REAR",
     "TIRES",
+    "FRICTION MAP",
     "STEERING",
     "SPEED-SENSITIVE STEERING",
     "GRIP & SLIP MODEL",
@@ -406,6 +407,41 @@ local GROUPS = {
     "FLAT TIRE // FRONT",
     "FLAT TIRE // REAR",
 }
+
+UVT = UVT or {}
+UVT.frictionMaps = {}
+
+UVT.discoverFrictionMaps = function()
+    UVT.frictionMaps = {}
+    local seen = {}
+    local ok, records = pcall(function()
+        return TweakDB:GetRecords("gamedataVehicleWheelsFrictionMap_Record")
+    end)
+    if ok and type(records) == "table" then
+        for _, record in ipairs(records) do
+            local idOk, mapId = pcall(function()
+                return vehicleIdString(record:GetID())
+            end)
+            local family = type(mapId) == "string" and
+                (mapId:find("^BikeDrivingFrictionMap%.") and "Bike maps" or
+                (mapId:find("^CarDrivingFrictionMap%.") and "Car maps" or nil)) or nil
+            if idOk and type(mapId) == "string" and mapId ~= "" and
+                family and not mapId:find("<TDBID:", 1, true) and not seen[mapId] then
+                seen[mapId] = true
+                table.insert(UVT.frictionMaps, {
+                    id = mapId,
+                    family = family,
+                })
+            end
+        end
+    end
+    table.sort(UVT.frictionMaps, function(a, b)
+        if a.family ~= b.family then return a.family < b.family end
+        return a.id:lower() < b.id:lower()
+    end)
+    print("[UltimateVehicleTuning] Discovered " .. #UVT.frictionMaps ..
+        " wheel friction maps.")
+end
 
 local DM = {
     total_mass = "total_mass", chassis_mass = "chassis_mass",
@@ -1590,6 +1626,11 @@ local function readVehicle(vehId)
     if not chain then return nil, err end
     local params = {}
     readMap(chain.dmId, DM, params)
+    local frictionMap = getRawFlat(chain.dmId, "wheelsFrictionMap")
+    local frictionMapId = vehicleIdString(frictionMap)
+    if frictionMapId ~= "" and not frictionMapId:find("<TDBID:", 1, true) then
+        params.wheels_friction_map = frictionMapId
+    end
     readVectorMap(chain.dmId, VECTOR_DM, params)
     readArrayMap(chain.dmId, ARRAY_DM, params)
     if chain.engId then readMap(chain.engId, ENG, params) end
@@ -1618,6 +1659,21 @@ local function readVehicle(vehId)
     return params, nil, chain
 end
 
+UVT.applyFrictionMap = function(driveModelId, params)
+    local target = params and params.wheels_friction_map or nil
+    if not driveModelId or type(target) ~= "string" or target == "" then return false end
+
+    local flatId = TweakDBID.new(driveModelId, ".wheelsFrictionMap")
+    local before = vehicleIdString(TweakDB:GetFlat(flatId))
+    TweakDB:SetFlat(flatId, TweakDBID.new(target))
+    local after = vehicleIdString(TweakDB:GetFlat(flatId))
+    local status = after == target and "OK" or "MISS"
+    table.insert(appliedList, "  wheelsFrictionMap: " .. before .. " -> " ..
+        target .. " [" .. status .. "]")
+    TweakDB:Update(driveModelId)
+    return true
+end
+
 local function writeVehicle(vehId, params)
     local ok, err = pcall(function()
         local chain, resolveErr = resolveChain(vehId)
@@ -1627,6 +1683,7 @@ local function writeVehicle(vehId, params)
         table.insert(appliedList, "--- " .. vehId .. " ---")
         table.insert(appliedList, "DM: " .. TDBID.ToStringDEBUG(chain.dmId))
         applyMap(chain.dmId, DM, params)
+        UVT.applyFrictionMap(chain.dmId, params)
         applyVectorMap(chain.dmId, VECTOR_DM, params)
         applyArrayMap(chain.dmId, ARRAY_DM, params)
 
@@ -3216,6 +3273,73 @@ UVT.UI.drawGroup = function(groupName, skipHeader)
     if activeTuneReadOnly then ImGui.EndDisabled() end
 end
 
+UVT.UI.drawFrictionMapGroup = function()
+    ImGui.PushStyleColor(ImGuiCol.Header, 0.10, 0.42, 0.66, 1.0)
+    ImGui.PushStyleColor(ImGuiCol.HeaderHovered, 0.14, 0.50, 0.76, 1.0)
+    ImGui.PushStyleColor(ImGuiCol.HeaderActive, 0.08, 0.36, 0.58, 1.0)
+    local open = ImGui.CollapsingHeader("FRICTION MAP", ImGuiTreeNodeFlags.DefaultOpen)
+    ImGui.PopStyleColor(3)
+    if not open then return end
+
+    local current = edit.wheels_friction_map
+    if type(current) ~= "string" or current == "" then
+        ImGui.TextDisabled("No wheel friction map is available on this vehicle.")
+        return
+    end
+
+    local changed = isChanged("wheels_friction_map")
+    local unsaved = isUnsaved("wheels_friction_map")
+    local label = (unsaved and "! " or "") .. (changed and "* " or "") ..
+        "Wheel Friction Map"
+    if unsaved then
+        ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.67, 0.15, 1.0)
+    elseif changed then
+        ImGui.PushStyleColor(ImGuiCol.Text, 0.25, 1.0, 0.55, 1.0)
+    end
+    ImGui.Text(label)
+    if unsaved or changed then ImGui.PopStyleColor() end
+
+    if activeTuneReadOnly then ImGui.BeginDisabled() end
+    ImGui.SetNextItemWidth(480)
+    if ImGui.BeginCombo("##wheels_friction_map", current, ImGuiComboFlags.HeightLargest) then
+        local currentListed = false
+        for _, option in ipairs(UVT.frictionMaps or {}) do
+            if option.id == current then currentListed = true end
+        end
+        if not currentListed then
+            ImGui.Selectable("> " .. current, false)
+            if #(UVT.frictionMaps or {}) > 0 then ImGui.Separator() end
+        end
+
+        local lastFamily = nil
+        for _, option in ipairs(UVT.frictionMaps or {}) do
+            if option.family ~= lastFamily then
+                if lastFamily ~= nil then ImGui.Separator() end
+                ImGui.TextDisabled(option.family)
+                lastFamily = option.family
+            end
+            local selectedMap = option.id == current
+            local optionLabel = (selectedMap and "> " or "") .. option.id
+            if ImGui.Selectable(optionLabel, false) and not selectedMap then
+                edit.wheels_friction_map = option.id
+                applyCurrent("Auto-applied friction map")
+            end
+        end
+        ImGui.EndCombo()
+    end
+    ImGui.SameLine()
+    local stockMap = currentStock().wheels_friction_map
+    if stockMap == nil then ImGui.BeginDisabled() end
+    if ImGui.Button("Reset##wheels_friction_map", 100, 0) then
+        resetParam("wheels_friction_map")
+    end
+    if stockMap == nil then ImGui.EndDisabled() end
+    if activeTuneReadOnly then ImGui.EndDisabled() end
+
+    ImGui.TextDisabled("Complete vanilla wheel-friction preset. Car and bike maps can be cross-tested.")
+    ImGui.TextDisabled("Drive models may be shared; respawn or exit and re-enter to load changed physics.")
+end
+
 UVT.UI.drawEngineAndGearingGroup = function()
     ImGui.PushStyleColor(ImGuiCol.Header, 0.10, 0.42, 0.66, 1.0)
     ImGui.PushStyleColor(ImGuiCol.HeaderHovered, 0.14, 0.50, 0.76, 1.0)
@@ -3620,6 +3744,8 @@ UVT.UI.draw = function()
                 if not advancedGroup or showAdvanced then
                     if group == "ENGINE & GEARING" then
                         UVT.UI.drawEngineAndGearingGroup()
+                    elseif group == "FRICTION MAP" then
+                        UVT.UI.drawFrictionMapGroup()
                     else
                         UVT.UI.drawGroup(group)
                     end
@@ -3662,6 +3788,7 @@ end
 registerForEvent("onInit", function()
     resetGearDebug()
     discoverOfficialVehicles()
+    UVT.discoverFrictionMaps()
 
     local loadedMetadata = loadJSON(METADATA_FILE)
     if type(loadedMetadata) == "table" then
@@ -3693,8 +3820,7 @@ registerForEvent("onInit", function()
             if not listed and isLikelyTrafficVehicleRecord(recordName) then
                 local _, trafficVehicle = registerGenericTrafficVehicle(recordName)
                 if trafficVehicle and ensureGenericTrafficDefault(trafficVehicle, false) then
-                    print("[UltimateVehicleTuning] Registered generic traffic default for " ..
-                        recordName)
+                    -- print("[UltimateVehicleTuning] Registered generic traffic default for " .. recordName)
                 end
             end
             applyPersistedTuneBeforeVehicleAttach(recordName)
