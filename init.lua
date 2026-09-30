@@ -243,14 +243,38 @@ local PARAMS = {
     { key = "max_torque",         group = "ENGINE & GEARING",   label = "Max Torque",       fmt = "%.0f Nm",  absMin = 0,     absMax = 10000 },
     { key = "resistance_torque",  group = "ENGINE & GEARING",   label = "Resistance",       fmt = "%.0f Nm",  absMin = 0,     absMax = 800 },
     { key = "max_rpm",            group = "ENGINE & GEARING",   label = "Max RPM",          fmt = "%.0f",     absMin = 2000,  absMax = 16000 },
-    { key = "susp_front_spring",  group = "SUSPENSION // FRONT", label = "Spring Rate",     fmt = "%.1f",     absMin = 0,     absMax = 500 },
-    { key = "susp_front_damp",    group = "SUSPENSION // FRONT", label = "Damping",         fmt = "%.0f",     absMin = 0,     absMax = 30000 },
-    { key = "susp_front_rebound", group = "SUSPENSION // FRONT", label = "Rebound",         fmt = "%.0f",     absMin = 0,     absMax = 30000 },
-    { key = "susp_front_antiroll",group = "SUSPENSION // FRONT", label = "Anti-Roll",       fmt = "%.1f",     absMin = 0,     absMax = 300 },
-    { key = "susp_rear_spring",   group = "SUSPENSION // REAR",  label = "Spring Rate",     fmt = "%.1f",     absMin = 0,     absMax = 500 },
-    { key = "susp_rear_damp",     group = "SUSPENSION // REAR",  label = "Damping",         fmt = "%.0f",     absMin = 0,     absMax = 30000 },
-    { key = "susp_rear_rebound",  group = "SUSPENSION // REAR",  label = "Rebound",         fmt = "%.0f",     absMin = 0,     absMax = 30000 },
-    { key = "susp_rear_antiroll", group = "SUSPENSION // REAR",  label = "Anti-Roll",       fmt = "%.1f",     absMin = 0,     absMax = 300 },
+    { key = "susp_front_spring", group = "SUSPENSION // FRONT", label = "Spring Rate", fmt = "%.1f", absMin = 0, absMax = 500 },
+    { key = "susp_front_antiroll", group = "SUSPENSION // FRONT", label = "Anti-Roll", fmt = "%.1f", absMin = 0, absMax = 300 },
+    { key = "susp_front_damp", group = "SUSPENSION // FRONT", label = "Damping", fmt = "%.0f", absMin = 0, absMax = 30000 },
+    { key = "susp_front_rebound", group = "SUSPENSION // FRONT", label = "Rebound", fmt = "%.0f", absMin = 0, absMax = 30000 },
+    { key = "front_bound_low", group = "SUSPENSION // FRONT", label = "Low-Rate Bound Damping", fmt = "%.0f", absMin = 0, absMax = 30000 },
+    { key = "front_rebound_low", group = "SUSPENSION // FRONT", label = "Low-Rate Rebound Damping", fmt = "%.0f", absMin = 0, absMax = 30000 },
+    { key = "front_comp_low", group = "SUSPENSION // FRONT", label = "Low-Rate Compression Point", fmt = "%.3f", absMin = 0, absMax = 5 },
+    { key = "front_comp_high", group = "SUSPENSION // FRONT", label = "High-Rate Compression Point", fmt = "%.3f", absMin = 0, absMax = 5 },
+    { key = "front_extreme_comp", group = "SUSPENSION // FRONT", label = "Extreme Compression Scale", fmt = "%.3f", absMin = 0, absMax = 10 },
+    { key = "front_logical_comp", group = "SUSPENSION // FRONT", label = "Logical Compression Length", fmt = "%.3f m", absMin = 0, absMax = 3 },
+    { key = "front_visual_droop", group = "SUSPENSION // FRONT", label = "Visual Suspension Droop", fmt = "%.3f m", absMin = 0, absMax = 3 },
+    { key = "front_sway_limit", group = "SUSPENSION // FRONT", label = "Swaybar Displacement Limit", fmt = "%.3f m", absMin = 0, absMax = 5 },
+    { key = "front_sway_length", group = "SUSPENSION // FRONT", label = "Swaybar Length Scalar", fmt = "%.2f", absMin = 0, absMax = 10 },
+    { key = "front_visual_comp", group = "SUSPENSION // FRONT", label = "Visual Compression Length", fmt = "%.3f m", absMin = 0, absMax = 3 },
+    { key = "front_tender_length", group = "SUSPENSION // FRONT", label = "Tender Spring Length", fmt = "%.3f m", absMin = 0, absMax = 3 },
+    { key = "front_wheel_offset_z", group = "SUSPENSION // FRONT", label = "Wheel Vertical Offset", fmt = "%.3f m", absMin = -2, absMax = 2 },
+    { key = "susp_rear_spring", group = "SUSPENSION // REAR", label = "Spring Rate", fmt = "%.1f", absMin = 0, absMax = 500 },
+    { key = "susp_rear_antiroll", group = "SUSPENSION // REAR", label = "Anti-Roll", fmt = "%.1f", absMin = 0, absMax = 300 },
+    { key = "susp_rear_damp", group = "SUSPENSION // REAR", label = "Damping", fmt = "%.0f", absMin = 0, absMax = 30000 },
+    { key = "susp_rear_rebound", group = "SUSPENSION // REAR", label = "Rebound", fmt = "%.0f", absMin = 0, absMax = 30000 },
+    { key = "rear_bound_low", group = "SUSPENSION // REAR", label = "Low-Rate Bound Damping", fmt = "%.0f", absMin = 0, absMax = 30000 },
+    { key = "rear_rebound_low", group = "SUSPENSION // REAR", label = "Low-Rate Rebound Damping", fmt = "%.0f", absMin = 0, absMax = 30000 },
+    { key = "rear_comp_low", group = "SUSPENSION // REAR", label = "Low-Rate Compression Point", fmt = "%.3f", absMin = 0, absMax = 5 },
+    { key = "rear_comp_high", group = "SUSPENSION // REAR", label = "High-Rate Compression Point", fmt = "%.3f", absMin = 0, absMax = 5 },
+    { key = "rear_extreme_comp", group = "SUSPENSION // REAR", label = "Extreme Compression Scale", fmt = "%.3f", absMin = 0, absMax = 10 },
+    { key = "rear_logical_comp", group = "SUSPENSION // REAR", label = "Logical Compression Length", fmt = "%.3f m", absMin = 0, absMax = 3 },
+    { key = "rear_visual_droop", group = "SUSPENSION // REAR", label = "Visual Suspension Droop", fmt = "%.3f m", absMin = 0, absMax = 3 },
+    { key = "rear_sway_limit", group = "SUSPENSION // REAR", label = "Swaybar Displacement Limit", fmt = "%.3f m", absMin = 0, absMax = 5 },
+    { key = "rear_sway_length", group = "SUSPENSION // REAR", label = "Swaybar Length Scalar", fmt = "%.2f", absMin = 0, absMax = 10 },
+    { key = "rear_visual_comp", group = "SUSPENSION // REAR", label = "Visual Compression Length", fmt = "%.3f m", absMin = 0, absMax = 3 },
+    { key = "rear_tender_length", group = "SUSPENSION // REAR", label = "Tender Spring Length", fmt = "%.3f m", absMin = 0, absMax = 3 },
+    { key = "rear_wheel_offset_z", group = "SUSPENSION // REAR", label = "Wheel Vertical Offset", fmt = "%.3f m", absMin = -2, absMax = 2 },
     { key = "tire_front_lat",     group = "TIRES",              label = "Front Lateral Grip",    fmt = "%.2f",     absMin = 0.05,  absMax = 3 },
     { key = "tire_front_long",    group = "TIRES",              label = "Front Longit. Grip",    fmt = "%.2f",     absMin = 0.05,  absMax = 3 },
     { key = "tire_rear_lat",      group = "TIRES",              label = "Rear Lateral Grip",     fmt = "%.2f",     absMin = 0.05,  absMax = 3 },
@@ -303,32 +327,8 @@ local PARAMS = {
     { key = "brake_front",        group = "BRAKING",            label = "Front Brake",      fmt = "%.0f Nm",  absMin = 0,     absMax = 20000 },
     { key = "brake_rear",         group = "BRAKING",            label = "Rear Brake",       fmt = "%.0f Nm",  absMin = 0,     absMax = 20000 },
     { key = "brake_handbrake",    group = "BRAKING",            label = "Handbrake",        fmt = "%.0f Nm",  absMin = 0,     absMax = 20000 },
-    { key = "front_sway_limit", group = "SUSPENSION // FRONT", label = "Swaybar Displacement Limit", fmt = "%.3f m", absMin = 0, absMax = 5 },
-    { key = "front_sway_length", group = "ADVANCED SUSPENSION // FRONT", label = "Swaybar Length Scalar", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "front_bound_low", group = "SUSPENSION // FRONT", label = "Low-Rate Bound Damping", fmt = "%.0f", absMin = 0, absMax = 30000 },
-    { key = "front_rebound_low", group = "SUSPENSION // FRONT", label = "Low-Rate Rebound Damping", fmt = "%.0f", absMin = 0, absMax = 30000 },
-    { key = "front_comp_low", group = "SUSPENSION // FRONT", label = "Low-Rate Compression Point", fmt = "%.3f", absMin = 0, absMax = 5 },
-    { key = "front_comp_high", group = "SUSPENSION // FRONT", label = "High-Rate Compression Point", fmt = "%.3f", absMin = 0, absMax = 5 },
-    { key = "front_extreme_comp", group = "SUSPENSION // FRONT", label = "Extreme Compression Scale", fmt = "%.3f", absMin = 0, absMax = 10 },
-    { key = "front_logical_comp", group = "SUSPENSION // FRONT", label = "Logical Compression Length", fmt = "%.3f m", absMin = 0, absMax = 3 },
-    { key = "front_visual_droop", group = "SUSPENSION // FRONT", label = "Visual Suspension Droop", fmt = "%.3f m", absMin = 0, absMax = 3 },
-    { key = "front_visual_comp", group = "SUSPENSION // FRONT", label = "Visual Compression Length", fmt = "%.3f m", absMin = 0, absMax = 3 },
-    { key = "front_tender_length", group = "ADVANCED SUSPENSION // FRONT", label = "Tender Spring Length", fmt = "%.3f m", absMin = 0, absMax = 3 },
-    { key = "front_wheel_offset_z", group = "SUSPENSION // FRONT", label = "Wheel Vertical Offset", fmt = "%.3f m", absMin = -2, absMax = 2 },
     { key = "tire_front_lat_fx", group = "TIRES", label = "Front Lateral Slip Effects", fmt = "%.2f", absMin = 0, absMax = 10 },
     { key = "tire_front_long_fx", group = "TIRES", label = "Front Longitudinal Slip Effects", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "rear_sway_limit", group = "SUSPENSION // REAR", label = "Swaybar Displacement Limit", fmt = "%.3f m", absMin = 0, absMax = 5 },
-    { key = "rear_sway_length", group = "ADVANCED SUSPENSION // REAR", label = "Swaybar Length Scalar", fmt = "%.2f", absMin = 0, absMax = 10 },
-    { key = "rear_bound_low", group = "SUSPENSION // REAR", label = "Low-Rate Bound Damping", fmt = "%.0f", absMin = 0, absMax = 30000 },
-    { key = "rear_rebound_low", group = "SUSPENSION // REAR", label = "Low-Rate Rebound Damping", fmt = "%.0f", absMin = 0, absMax = 30000 },
-    { key = "rear_comp_low", group = "SUSPENSION // REAR", label = "Low-Rate Compression Point", fmt = "%.3f", absMin = 0, absMax = 5 },
-    { key = "rear_comp_high", group = "SUSPENSION // REAR", label = "High-Rate Compression Point", fmt = "%.3f", absMin = 0, absMax = 5 },
-    { key = "rear_extreme_comp", group = "SUSPENSION // REAR", label = "Extreme Compression Scale", fmt = "%.3f", absMin = 0, absMax = 10 },
-    { key = "rear_logical_comp", group = "SUSPENSION // REAR", label = "Logical Compression Length", fmt = "%.3f m", absMin = 0, absMax = 3 },
-    { key = "rear_visual_droop", group = "SUSPENSION // REAR", label = "Visual Suspension Droop", fmt = "%.3f m", absMin = 0, absMax = 3 },
-    { key = "rear_visual_comp", group = "SUSPENSION // REAR", label = "Visual Compression Length", fmt = "%.3f m", absMin = 0, absMax = 3 },
-    { key = "rear_tender_length", group = "ADVANCED SUSPENSION // REAR", label = "Tender Spring Length", fmt = "%.3f m", absMin = 0, absMax = 3 },
-    { key = "rear_wheel_offset_z", group = "SUSPENSION // REAR", label = "Wheel Vertical Offset", fmt = "%.3f m", absMin = -2, absMax = 2 },
     { key = "tire_rear_lat_fx", group = "TIRES", label = "Rear Lateral Slip Effects", fmt = "%.2f", absMin = 0, absMax = 10 },
     { key = "tire_rear_long_fx", group = "TIRES", label = "Rear Longitudinal Slip Effects", fmt = "%.2f", absMin = 0, absMax = 10 },
     { key = "front_is_drive", group = "DRIVETRAIN & BRAKE ROLES", label = "Front Wheels Driven", type = "bool" },
@@ -384,6 +384,7 @@ end
 local GROUPS = {
     "MASS & DYNAMICS",
     "CENTER OF MASS & BODY ROTATION",
+    "BIKE DYNAMICS",
     "ENGINE & GEARING",
     "SUSPENSION // FRONT",
     "SUSPENSION // REAR",
@@ -395,8 +396,6 @@ local GROUPS = {
     "ROTATION & DRIFT LIMITER",
     "BRAKING",
     "WHEEL CONTACT MODEL",
-    "ADVANCED SUSPENSION // FRONT",
-    "ADVANCED SUSPENSION // REAR",
     "DRIVETRAIN & BRAKE ROLES",
     "WHEEL GEOMETRY // FRONT",
     "WHEEL GEOMETRY // REAR",
@@ -405,7 +404,6 @@ local GROUPS = {
     "TRACTION & ACCELERATION HELPERS",
     "DOWNFORCE & AIR CONTROL",
     "BURNOUT & LAUNCH GRIP",
-    "BIKE DYNAMICS",
     "AIR CONTROL // GENERAL",
     "AIR CONTROL // PITCH",
     "AIR CONTROL // YAW",
@@ -606,21 +604,21 @@ table.insert(PARAMS, { key = "air_flip_pid_d", group = "AIR CONTROL // GENERAL",
 
 local AIR_AXIS_FIELDS = {
     { "control_axis", "Control Axis", "controlAxis", nil, nil, nil, "enum", { "None", "FB", "LR" } },
-    { "max_velocity", "Maximum Velocity", "maxVelocity", "%.2f", 0, 100 },
+    { "max_velocity", "Maximum Velocity", "maxVelocity", "%.2f", -100, 100 },
     { "no_input_brake", "No-Input Brake Multiplier", "brakeMultiplierWhenNoInput", "%.2f", 0, 20 },
     { "input_damp", "Input Damping", "inputDampFactor", "%.2f", 0, 20 },
     { "stabilize", "Stabilize Axis", "stabilizeAxis", nil, nil, nil, "bool" },
     { "velocity_damp", "Velocity Damping", "velocityDampFactor", "%.2f", 0, 20 },
     { "velocity_threshold_min", "Velocity Threshold Minimum", "velocityDampingThresholdMin", "%.2f", 0, 200 },
     { "velocity_threshold_max", "Velocity Threshold Maximum", "velocityDampingThresholdMax", "%.2f", 0, 300 },
-    { "velocity_factor_min", "Velocity Factor Minimum", "velocityDampingFactorMin", "%.2f", -20, 20 },
-    { "velocity_factor_max", "Velocity Factor Maximum", "velocityDampingFactorMax", "%.2f", -20, 20 },
+    { "velocity_factor_min", "Velocity Factor Minimum", "velocityDampingFactorMin", "%.2f", -1000, 1000 },
+    { "velocity_factor_max", "Velocity Factor Maximum", "velocityDampingFactorMax", "%.2f", -1000, 1000 },
     { "angle_damp", "Angle Damping", "angleDampFactor", "%.2f", 0, 20 },
     { "angle_threshold_min", "Angle Threshold Minimum", "angleCorrectionThresholdMin", "%.1f deg", 0, 180 },
     { "angle_threshold_max", "Angle Threshold Maximum", "angleCorrectionThresholdMax", "%.1f deg", 0, 180 },
-    { "angle_factor_min", "Angle Factor Minimum", "angleCorrectionFactorMin", "%.2f", -20, 20 },
-    { "angle_factor_max", "Angle Factor Maximum", "angleCorrectionFactorMax", "%.2f", -20, 20 },
-    { "velocity_compensation", "Maximum Velocity Compensation", "maxVelocityCompensation", "%.2f", 0, 500 },
+    { "angle_factor_min", "Angle Factor Minimum", "angleCorrectionFactorMin", "%.2f", -100, 100 },
+    { "angle_factor_max", "Angle Factor Maximum", "angleCorrectionFactorMax", "%.2f", -100, 100 },
+    { "velocity_compensation", "Maximum Velocity Compensation", "maxVelocityCompensation", "%.2f", 0, 1000 },
     { "angle_compensation", "Maximum Angle Compensation", "maxAngleCompensation", "%.2f", 0, 500 },
     { "zero_angle", "Zero-Angle Threshold", "zeroAngleThreshold", "%.1f deg", 0, 180 },
     { "compensation_angle", "Maximum Compensation Angle", "maxAngleToCompensateThreshold", "%.1f deg", 0, 360 },
@@ -792,16 +790,30 @@ local BASIC_PARAM_KEYS = {
     susp_front_antiroll = true,
     front_bound_low = true,
     front_rebound_low = true,
+    front_comp_low = true,
+    front_comp_high = true,
+    front_extreme_comp = true,
+    front_logical_comp = true,
+    front_visual_droop = true,
     susp_rear_spring = true,
     susp_rear_damp = true,
     susp_rear_rebound = true,
     susp_rear_antiroll = true,
     rear_bound_low = true,
     rear_rebound_low = true,
+    rear_comp_low = true,
+    rear_comp_high = true,
+    rear_extreme_comp = true,
+    rear_logical_comp = true,
+    rear_visual_droop = true,
     tire_front_lat = true,
     tire_front_long = true,
     tire_rear_lat = true,
     tire_rear_long = true,
+    tire_front_lat_fx = true,
+    tire_front_long_fx = true,
+    tire_rear_lat_fx = true,
+    tire_rear_long_fx = true,
     steer_turn_add = true,
     steer_turn_sub = true,
     steer_assist = true,
@@ -815,15 +827,14 @@ local BASIC_PARAM_KEYS = {
     steer_mid_rate_mul = true,
     steer_max_rate_mul = true,
     steer_slow_rate = true,
-    rotation_max_angular = true,
-    rotation_handbrake_limit = true,
-    rotation_drift_limit = true,
-    rotation_drift_angle_begin = true,
-    rotation_drift_angle_end = true,
-    rotation_drift_vel_begin = true,
-    rotation_drift_vel_max = true,
-    rotation_exceeded_angle = true,
-    rotation_smoothing = true,
+    steer_fast_rate = true,
+    slope_traction_factor = true,
+    slope_traction_begin = true,
+    slope_traction_max = true,
+    downforce_min_speed = true,
+    downforce_max_speed = true,
+    downforce_ground_factor = true,
+    downforce_air_factor = true,
     brake_front = true,
     brake_rear = true,
     brake_handbrake = true,
@@ -882,6 +893,18 @@ local loadingMountedTuneApplied = false
 local genericTrafficDefaults = {}
 local genericTrafficBaselines = {}
 local bikeGravityInfrastructure = {}
+UVT.DynamicDownforce = {
+    stateKey = "dynamic_downforce_enabled",
+    paramKeys = {
+        "downforce_min_speed",
+        "downforce_max_speed",
+        "downforce_ground_factor",
+        "downforce_air_factor",
+    },
+    infrastructure = {},
+    templateId = nil,
+    counter = 0,
+}
 local resetAccelerationTimer
 local selectMounted
 local accelerationTimer = {
@@ -1794,14 +1817,151 @@ UVT.applyFrictionMap = function(driveModelId, params)
     return true
 end
 
+UVT.isDynamicDownforceHelperId = function(helperId)
+    if not helperId then return false end
+    local signature = (debugRecordName(helperId) .. " " ..
+        tostring(getRawFlat(helperId, "type") or "")):lower()
+    return signature:find("dynamicdownforcehelper", 1, true) ~= nil
+end
+
+UVT.copyRecordIdArray = function(values)
+    local result = {}
+    for index, value in ipairs(values or {}) do result[index] = value end
+    return result
+end
+
+UVT.recordIdArrayContains = function(values, target)
+    local targetName = debugRecordName(target)
+    for _, value in ipairs(values or {}) do
+        if debugRecordName(value) == targetName then return true end
+    end
+    return false
+end
+
+UVT.dynamicDownforceEntry = function(driveModelId, create)
+    local key = debugRecordName(driveModelId)
+    local entry = UVT.DynamicDownforce.infrastructure[key]
+    if entry or not create then return entry end
+
+    local helpers = getRawFlat(driveModelId, "driveHelpers")
+    if type(helpers) ~= "table" then return nil end
+    entry = {
+        driveModelId = driveModelId,
+        originalHelpers = UVT.copyRecordIdArray(helpers),
+        originalDownforceId = nil,
+        generatedHelperId = nil,
+    }
+    for _, helperId in ipairs(entry.originalHelpers) do
+        if UVT.isDynamicDownforceHelperId(helperId) then
+            entry.originalDownforceId = helperId
+            break
+        end
+    end
+    UVT.DynamicDownforce.infrastructure[key] = entry
+    return entry
+end
+
+UVT.setDriveModelHelpers = function(driveModelId, helpers)
+    TweakDB:SetFlat(TweakDBID.new(driveModelId, ".driveHelpers"), helpers)
+    TweakDB:Update(driveModelId)
+end
+
+UVT.createDynamicDownforceHelper = function(entry)
+    if entry.generatedHelperId and getRecord(debugRecordName(entry.generatedHelperId)) then
+        return entry.generatedHelperId
+    end
+    if not UVT.DynamicDownforce.templateId then
+        return nil, "No DynamicDownforceHelper template is available."
+    end
+
+    local helperName
+    repeat
+        UVT.DynamicDownforce.counter = UVT.DynamicDownforce.counter + 1
+        helperName = "Vehicle.UVT_DynamicDownforceHelper_" ..
+            tostring(UVT.DynamicDownforce.counter)
+    until not getRecord(helperName)
+
+    local helperId = TweakDBID.new(helperName)
+    local cloned = pcall(function()
+        TweakDB:CloneRecord(helperId, UVT.DynamicDownforce.templateId)
+    end)
+    if not cloned or not getRecord(helperName) then
+        return nil, "Could not clone a DynamicDownforceHelper record."
+    end
+
+    local neutral = {
+        minSpeed = 10,
+        maxSpeed = 40,
+        maxSpeedFactorGround = 0,
+        maxSpeedFactorAir = 0,
+    }
+    for flat, value in pairs(neutral) do
+        TweakDB:SetFlat(TweakDBID.new(helperId, "." .. flat), value)
+    end
+    TweakDB:Update(helperId)
+    entry.generatedHelperId = helperId
+    return helperId
+end
+
+UVT.reconcileDynamicDownforce = function(chain, desired)
+    if type(desired) ~= "boolean" then return true end
+    if desired and chain.helperIds.downforce then return true end
+    if not desired and not chain.helperIds.downforce then return true end
+
+    local entry = UVT.dynamicDownforceEntry(chain.dmId, true)
+    if not entry then
+        return nil, "The shared drive model does not expose a driveHelpers array."
+    end
+    local helpers = getRawFlat(chain.dmId, "driveHelpers")
+    if type(helpers) ~= "table" then
+        return nil, "Could not read the shared drive model's helpers."
+    end
+    helpers = UVT.copyRecordIdArray(helpers)
+
+    if desired then
+        local helperId = entry.originalDownforceId or entry.generatedHelperId
+        local helperErr
+        if not helperId then
+            helperId, helperErr = UVT.createDynamicDownforceHelper(entry)
+        end
+        if not helperId then return nil, helperErr end
+        if not UVT.recordIdArrayContains(helpers, helperId) then
+            table.insert(helpers, helperId)
+            UVT.setDriveModelHelpers(chain.dmId, helpers)
+        end
+        table.insert(appliedList, "  dynamicDownforceHelper: enabled on shared drive model")
+    else
+        local filtered = {}
+        for _, helperId in ipairs(helpers) do
+            if not UVT.isDynamicDownforceHelperId(helperId) then
+                table.insert(filtered, helperId)
+            end
+        end
+        UVT.setDriveModelHelpers(chain.dmId, filtered)
+        table.insert(appliedList, "  dynamicDownforceHelper: disabled on shared drive model")
+    end
+
+    return true
+end
+
 local function writeVehicle(vehId, params)
     local ok, err = pcall(function()
         local chain, resolveErr = resolveChain(vehId)
         if not chain then error(resolveErr or "resolve failed") end
-        local gearMaxSpeedsBefore = captureGearMaxSpeeds(chain.gearIds)
-
         table.insert(appliedList, "--- " .. vehId .. " ---")
         table.insert(appliedList, "DM: " .. TDBID.ToStringDEBUG(chain.dmId))
+        if type(params[UVT.DynamicDownforce.stateKey]) == "boolean" then
+            local reconciled, reconcileErr =
+                UVT.reconcileDynamicDownforce(
+                    chain,
+                    params[UVT.DynamicDownforce.stateKey]
+                )
+            if not reconciled then error(reconcileErr or "Could not change dynamic downforce.") end
+            chain, resolveErr = resolveChain(vehId)
+            if not chain then error("Could not resolve drive model after changing dynamic downforce.") end
+        end
+        local gearMaxSpeedsBefore = captureGearMaxSpeeds(chain.gearIds)
+
         applyMap(chain.dmId, DM, params)
         UVT.applyFrictionMap(chain.dmId, params)
         applyVectorMap(chain.dmId, VECTOR_DM, params)
@@ -2215,6 +2375,67 @@ local function exportStockTunes()
     lastError = "Stock export failed: " .. tostring(err)
     configStatus = lastError
     return false
+end
+
+UVT.initializeDynamicDownforceInfrastructure = function()
+    UVT.DynamicDownforce.infrastructure = {}
+    UVT.DynamicDownforce.templateId = nil
+    UVT.DynamicDownforce.counter = 0
+
+    for _, veh in ipairs(VEHICLES) do
+        for _, vehId in ipairs(candidateIds(veh)) do
+            local chain = resolveChain(vehId)
+            if chain and chain.helperIds.downforce then
+                UVT.DynamicDownforce.templateId = chain.helperIds.downforce
+                print("[UltimateVehicleTuning] Dynamic downforce template: " ..
+                    debugRecordName(UVT.DynamicDownforce.templateId))
+                return true
+            end
+        end
+    end
+    print("[UltimateVehicleTuning] No DynamicDownforceHelper template was found.")
+    return false
+end
+
+UVT.restoreDynamicDownforceEntry = function(entry)
+    if not entry then return false end
+    local restored = pcall(function()
+        UVT.setDriveModelHelpers(entry.driveModelId, entry.originalHelpers)
+        if entry.generatedHelperId then
+            TweakDB:DeleteRecord(entry.generatedHelperId)
+        end
+    end)
+    UVT.DynamicDownforce.infrastructure[debugRecordName(entry.driveModelId)] = nil
+    return restored
+end
+
+UVT.restoreDynamicDownforceForVehicle = function(veh)
+    if not veh then return false end
+    local restored = false
+    local seen = {}
+    for _, vehId in ipairs(candidateIds(veh)) do
+        local chain = resolveChain(vehId)
+        if chain and chain.dmId then
+            local key = debugRecordName(chain.dmId)
+            if not seen[key] then
+                seen[key] = true
+                local entry = UVT.DynamicDownforce.infrastructure[key]
+                if entry and UVT.restoreDynamicDownforceEntry(entry) then
+                    restored = true
+                end
+            end
+        end
+    end
+    return restored
+end
+
+UVT.restoreDynamicDownforceInfrastructure = function()
+    local entries = {}
+    for _, entry in pairs(UVT.DynamicDownforce.infrastructure) do
+        table.insert(entries, entry)
+    end
+    for _, entry in ipairs(entries) do UVT.restoreDynamicDownforceEntry(entry) end
+    UVT.DynamicDownforce.infrastructure = {}
 end
 
 local function setupBikeGravityInfrastructure()
@@ -3284,6 +3505,49 @@ local function resetParam(key)
     applyCurrent("Reset " .. key)
 end
 
+UVT.currentDynamicDownforceInfo = function()
+    local veh = currentVeh()
+    if not veh then return false, nil end
+    for _, vehId in ipairs(candidateIds(veh)) do
+        local chain = resolveChain(vehId)
+        if chain and chain.dmId then
+            return chain.helperIds.downforce ~= nil, debugRecordName(chain.dmId)
+        end
+    end
+    return false, nil
+end
+
+UVT.enableDynamicDownforce = function()
+    edit[UVT.DynamicDownforce.stateKey] = true
+    local defaults = {
+        downforce_min_speed = 10,
+        downforce_max_speed = 40,
+        downforce_ground_factor = 0,
+        downforce_air_factor = 0,
+    }
+    for key, value in pairs(defaults) do
+        if edit[key] == nil then edit[key] = value end
+    end
+    applyCurrent("Enabled dynamic downforce for")
+end
+
+UVT.disableDynamicDownforce = function()
+    edit[UVT.DynamicDownforce.stateKey] = false
+    applyCurrent("Disabled dynamic downforce for")
+end
+
+UVT.resetDynamicDownforce = function()
+    local veh = currentVeh()
+    if not veh then return end
+    UVT.restoreDynamicDownforceForVehicle(veh)
+    edit[UVT.DynamicDownforce.stateKey] = nil
+    local baseline = currentStock()
+    for _, key in ipairs(UVT.DynamicDownforce.paramKeys) do
+        edit[key] = baseline[key]
+    end
+    applyCurrent("Reset dynamic downforce for")
+end
+
 local function applyEasyGearingValues()
     local firstTorque = nil
     for gear = 2, 8 do
@@ -3554,6 +3818,64 @@ UVT.UI.drawGroup = function(groupName, skipHeader, forceAll)
     end
 
     if activeTuneReadOnly then ImGui.EndDisabled() end
+end
+
+UVT.UI.drawDownforceAndAirControlGroup = function()
+    ImGui.PushStyleColor(ImGuiCol.Header, 0.10, 0.42, 0.66, 1.0)
+    ImGui.PushStyleColor(ImGuiCol.HeaderHovered, 0.14, 0.50, 0.76, 1.0)
+    ImGui.PushStyleColor(ImGuiCol.HeaderActive, 0.08, 0.36, 0.58, 1.0)
+    local open = ImGui.CollapsingHeader(
+        "DOWNFORCE & AIR CONTROL",
+        ImGuiTreeNodeFlags.DefaultOpen
+    )
+    ImGui.PopStyleColor(3)
+    if not open then return end
+
+    local available, driveModelName = UVT.currentDynamicDownforceInfo()
+    ImGui.TextWrapped(
+        "Dynamic downforce is attached to the shared drive model. Enabling or " ..
+        "disabling it can affect every vehicle and tune using that model; when " ..
+        "tunes conflict, whichever tune is applied last wins. Only use this if " ..
+        "you know what you're doing."
+    )
+    if driveModelName then
+        ImGui.TextDisabled("Shared drive model: " .. driveModelName)
+    end
+
+    local directive = edit[UVT.DynamicDownforce.stateKey]
+    local directiveLabel = directive == true and "Enable" or
+        (directive == false and "Disable" or "Unset")
+    ImGui.TextDisabled(
+        "Current helper: " .. (available and "Available" or "Unavailable") ..
+        " | Tune instruction: " .. directiveLabel
+    )
+
+    if activeTuneReadOnly then ImGui.BeginDisabled() end
+    if available then
+        if ImGui.Button("Disable Dynamic Downforce", 220, 0) then
+            UVT.disableDynamicDownforce()
+        end
+    else
+        if ImGui.Button("Enable Dynamic Downforce", 220, 0) then
+            UVT.enableDynamicDownforce()
+        end
+    end
+    ImGui.SameLine()
+    if directive == nil then ImGui.BeginDisabled() end
+    if ImGui.Button("Reset##dynamic_downforce", 100, 0) then
+        UVT.resetDynamicDownforce()
+    end
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip(
+            "Clear this tune's enable/disable instruction and restore the " ..
+            "session-start helper state."
+        )
+    end
+    if directive == nil then ImGui.EndDisabled() end
+    if activeTuneReadOnly then ImGui.EndDisabled() end
+
+    ImGui.Spacing()
+    UVT.UI.drawGroup("DOWNFORCE & AIR CONTROL", true)
 end
 
 UVT.UI.drawFrictionMapGroup = function()
@@ -4040,6 +4362,8 @@ UVT.UI.draw = function()
                     if edit.wheels_friction_map ~= nil then
                         UVT.UI.drawFrictionMapGroup()
                     end
+                elseif group == "DOWNFORCE & AIR CONTROL" then
+                    UVT.UI.drawDownforceAndAirControlGroup()
                 else
                     UVT.UI.drawGroup(group)
                 end
@@ -4094,6 +4418,7 @@ registerForEvent("onInit", function()
     sortVehicleRosterByClass()
     captureSessionStock()
     setupBikeGravityInfrastructure()
+    UVT.initializeDynamicDownforceInfrastructure()
     prepareGenericTrafficDefaults()
     applySelectedTunes()
     loadVehicleTune(selected, vehicleMetadata(VEHICLES[selected].id).activeTune, true, false)
@@ -4154,6 +4479,7 @@ registerForEvent("onInit", function()
 end)
 
 registerForEvent("onShutdown", function()
+    UVT.restoreDynamicDownforceInfrastructure()
     if tdbReady and next(stock) then restoreSessionStock() end
     restoreBikeGravityInfrastructure()
 end)
