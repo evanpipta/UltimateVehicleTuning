@@ -5,4 +5,5 @@ release/
 tunes/**/*.json
 !tunes/**/modded_default.json
 !tunes/**/Modded - Performance.json
+!tunes/**/Modded - Alternate Friction.json
 !tunes/**/Stage 3.json
