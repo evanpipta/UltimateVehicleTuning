@@ -79,6 +79,12 @@ Vanilla vehicles often have acceleration and top-speed tuning that is conservati
 [*]Cyber Engine Tweaks (CET)
 [/list]
 
+[size=4][b]Bundled airborne-physics tuning[/b][/size]
+
+The included Modded default tunes now contain UVT-specific speed-scaled gravity assistance to help vehicles remain planted over bumps, crests, and uneven roads. Car defaults also reduce automatic pitch and roll correction in the air. These changes are tune-specific: selecting Vanilla restores the captured vanilla values.
+
+Separate gravity or air-control replacers are not required and may overwrite the same shared TweakDB records. The approach was independently implemented for UVT rather than copying another mod's configuration.
+
 [line]
 
 [size=5][b]Installing the main mod[/b][/size]
@@ -198,7 +204,7 @@ The generated fallback improves steering response, uses safe speed-sensitive ste
 
 [size=5][b]Tuning guide[/b][/size]
 
-This section covers the most useful controls. The advanced sections expose many additional values, but most tunes can be created with the parameters below.
+Basic mode shows the controls most frequently changed by the included defaults and custom development tunes. Enable [b]Show advanced parameters[/b] to reveal every supported value within the same semantic sections. Advanced gearing remains a separate toggle inside Engine & Gearing because it expands the simplified final-drive controls into every individual gear value.
 
 [size=4][b]Mass & Dynamics[/b][/size]
 

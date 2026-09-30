@@ -593,8 +593,19 @@ local BURNOUT = {
 
 local AIR_CONTROL = { air_mass_reference = "massReference" }
 table.insert(PARAMS, { key = "air_mass_reference", group = "AIR CONTROL // GENERAL", label = "Mass Reference", fmt = "%.0f kg", absMin = 0, absMax = 10000 })
+local AIR_CONTROL_ARRAYS = {
+    flippedOverRecoveryPID = {
+        "air_flip_pid_p",
+        "air_flip_pid_i",
+        "air_flip_pid_d",
+    },
+}
+table.insert(PARAMS, { key = "air_flip_pid_p", group = "AIR CONTROL // GENERAL", label = "Flip Recovery PID Proportional", fmt = "%.2f", absMin = -1000, absMax = 1000 })
+table.insert(PARAMS, { key = "air_flip_pid_i", group = "AIR CONTROL // GENERAL", label = "Flip Recovery PID Integral", fmt = "%.2f", absMin = -1000, absMax = 1000 })
+table.insert(PARAMS, { key = "air_flip_pid_d", group = "AIR CONTROL // GENERAL", label = "Flip Recovery PID Derivative", fmt = "%.2f", absMin = -1000, absMax = 1000 })
 
 local AIR_AXIS_FIELDS = {
+    { "control_axis", "Control Axis", "controlAxis", nil, nil, nil, "enum", { "None", "FB", "LR" } },
     { "max_velocity", "Maximum Velocity", "maxVelocity", "%.2f", 0, 100 },
     { "no_input_brake", "No-Input Brake Multiplier", "brakeMultiplierWhenNoInput", "%.2f", 0, 20 },
     { "input_damp", "Input Damping", "inputDampFactor", "%.2f", 0, 20 },
@@ -623,6 +634,14 @@ for axis, map in pairs(AIR_AXIS_MAPS) do
         map[key] = spec[3]
         if spec[7] == "bool" then
             table.insert(PARAMS, { key = key, group = group, label = spec[2], type = "bool" })
+        elseif spec[7] == "enum" then
+            table.insert(PARAMS, {
+                key = key,
+                group = group,
+                label = spec[2],
+                type = "enum",
+                options = spec[8],
+            })
         else
             table.insert(PARAMS, { key = key, group = group, label = spec[2], fmt = spec[4], absMin = spec[5], absMax = spec[6] })
         end
@@ -747,6 +766,79 @@ for _, spec in ipairs(HELPER_SPECS) do
     table.insert(PARAMS, { key = key, group = group, label = label, fmt = fmt, absMin = absMin, absMax = absMax })
 end
 
+-- Basic mode is deliberately curated from the stock-vs-tune usage audit.
+-- Advanced mode retains every supported field in its semantic section.
+local BASIC_PARAM_KEYS = {
+    total_mass = true,
+    chassis_mass = true,
+    air_resistance = true,
+    com_y = true,
+    com_z = true,
+    inertia_x = true,
+    inertia_y = true,
+    inertia_z = true,
+    weight_transfer_fwd = true,
+    weight_transfer_side = true,
+    turning_roll = true,
+    max_torque = true,
+    resistance_torque = true,
+    max_rpm = true,
+    gear_change_time = true,
+    gear_change_cooldown = true,
+    final_gear_torque_decay = true,
+    susp_front_spring = true,
+    susp_front_damp = true,
+    susp_front_rebound = true,
+    susp_front_antiroll = true,
+    front_bound_low = true,
+    front_rebound_low = true,
+    susp_rear_spring = true,
+    susp_rear_damp = true,
+    susp_rear_rebound = true,
+    susp_rear_antiroll = true,
+    rear_bound_low = true,
+    rear_rebound_low = true,
+    tire_front_lat = true,
+    tire_front_long = true,
+    tire_rear_lat = true,
+    tire_rear_long = true,
+    steer_turn_add = true,
+    steer_turn_sub = true,
+    steer_assist = true,
+    steer_speed_enabled = true,
+    steer_max_angle = true,
+    steer_base_speed = true,
+    steer_mid_speed = true,
+    steer_max_speed = true,
+    steer_mid_angle_mul = true,
+    steer_max_angle_mul = true,
+    steer_mid_rate_mul = true,
+    steer_max_rate_mul = true,
+    steer_slow_rate = true,
+    rotation_max_angular = true,
+    rotation_handbrake_limit = true,
+    rotation_drift_limit = true,
+    rotation_drift_angle_begin = true,
+    rotation_drift_angle_end = true,
+    rotation_drift_vel_begin = true,
+    rotation_drift_vel_max = true,
+    rotation_exceeded_angle = true,
+    rotation_smoothing = true,
+    brake_front = true,
+    brake_rear = true,
+    brake_handbrake = true,
+    contact_decrease_time = true,
+    differential_overshoot = true,
+    bike_tilt_speed = true,
+    bike_tilt_return_speed = true,
+    bike_tilt_custom_speed = true,
+    bike_max_tilt = true,
+    bike_com_damping = true,
+}
+for _, def in ipairs(PARAMS) do
+    def.uiTier = BASIC_PARAM_KEYS[def.key] and "basic" or "advanced"
+end
+
 local showOverlay = false
 local showAdvanced = false
 local easyGearing = {
@@ -762,6 +854,7 @@ local easyGearing = {
 local selected = 1
 local edit = {}
 local stock = {}
+local cleanStock = {}
 local saved = {}
 local diskSaved = {}
 local lastError = ""
@@ -788,6 +881,7 @@ local loadingTunesApplied = false
 local loadingMountedTuneApplied = false
 local genericTrafficDefaults = {}
 local genericTrafficBaselines = {}
+local bikeGravityInfrastructure = {}
 local resetAccelerationTimer
 local selectMounted
 local accelerationTimer = {
@@ -818,6 +912,9 @@ local MODDED_DEFAULT_EDITABLE = false
 local ACCELERATION_TIMER_ENABLED = true
 -- Developer switch: write completed stopwatch runs to acceleration_results.json.
 local DEV_SAVE_ACCELERATION_RESULTS = false
+-- Developer switch: expose a button that writes the pre-UVT runtime baseline.
+local DEV_STOCK_EXPORT_ENABLED = false
+local DEV_STOCK_EXPORT_FILE = "stock_tunes.json"
 local ACCELERATION_CHECKPOINTS_KPH = { 100, 150, 200, 300 }
 local BASE_CONFIG_FILE = "config_base.json"
 local METADATA_FILE = "metadata.json"
@@ -1430,6 +1527,13 @@ local function readMap(recordId, map, params)
     if not recordId then return end
     for key, flat in pairs(map) do
         local val = getFlat(recordId, flat)
+        if val == nil and key:find("_control_axis$", 1, false) then
+            local raw = getRawFlat(recordId, flat)
+            local text = raw ~= nil and tostring(raw) or nil
+            if text and text ~= "" and not text:find("userdata:", 1, true) then
+                val = text:match("%-%-%[%[%s*(%w+)%s*%-%-%]%]") or text
+            end
+        end
         if val ~= nil then params[key] = val end
     end
 end
@@ -1649,6 +1753,7 @@ local function readVehicle(vehId)
     readMap(chain.burnoutId, BURNOUT, params)
     readHelperMaps(chain.helperIds, params)
     readMap(chain.airControlId, AIR_CONTROL, params)
+    readArrayMap(chain.airControlId, AIR_CONTROL_ARRAYS, params)
     for axis, map in pairs(AIR_AXIS_MAPS) do
         readMap(chain.airAxisIds[axis], map, params)
     end
@@ -1718,6 +1823,7 @@ local function writeVehicle(vehId, params)
         applyMap(chain.burnoutId, BURNOUT, params)
         applyHelperMaps(chain.helperIds, params)
         applyMap(chain.airControlId, AIR_CONTROL, params)
+        applyArrayMap(chain.airControlId, AIR_CONTROL_ARRAYS, params)
         for axis, map in pairs(AIR_AXIS_MAPS) do
             applyMap(chain.airAxisIds[axis], map, params)
         end
@@ -2075,8 +2181,136 @@ local function captureSessionStock()
             print("[UltimateVehicleTuning] No live Vanilla baseline for " .. veh.id)
         end
     end
+    cleanStock = copyVehicleMap(stock)
     print("[UltimateVehicleTuning] Captured live Vanilla baseline for " .. count .. " vehicles.")
     return count
+end
+
+local function exportStockTunes()
+    local vehicles = {}
+    local count = 0
+    for _, veh in ipairs(VEHICLES) do
+        local values = cleanStock[veh.id]
+        if type(values) == "table" and next(values) then
+            vehicles[veh.id] = {
+                name = veh.name,
+                class = veh.class,
+                values = copyTbl(values),
+            }
+            count = count + 1
+        end
+    end
+    local ok, err = saveJSON(DEV_STOCK_EXPORT_FILE, {
+        schema = "uvt_stock_tunes_v1",
+        source = "Pre-UVT runtime values captured before selected tunes are applied",
+        vehicleCount = count,
+        vehicles = vehicles,
+    })
+    if ok then
+        configStatus = "Exported clean runtime stock for " .. count ..
+            " vehicles to " .. DEV_STOCK_EXPORT_FILE
+        print("[UltimateVehicleTuning] " .. configStatus)
+        return true
+    end
+    lastError = "Stock export failed: " .. tostring(err)
+    configStatus = lastError
+    return false
+end
+
+local function setupBikeGravityInfrastructure()
+    bikeGravityInfrastructure = {}
+    local driveModels = {}
+    for _, veh in ipairs(VEHICLES) do
+        if isBikeRecord(veh.id) then
+            local chain = resolveChain(veh.id)
+            if chain and chain.dmId and not chain.helperIds.air_gravity then
+                local key = debugRecordName(chain.dmId)
+                driveModels[key] = driveModels[key] or chain.dmId
+            end
+        end
+    end
+
+    local created = 0
+    for key, driveModelId in pairs(driveModels) do
+        local helpers = getRawFlat(driveModelId, "driveHelpers")
+        if type(helpers) == "table" then
+            local original, updated = {}, {}
+            for index, helper in ipairs(helpers) do
+                original[index] = helper
+                updated[index] = helper
+            end
+            local helperName = "Vehicle.UVT_BikeGravityModifier_" ..
+                tostring(created + 1)
+            local cloned = pcall(function()
+                TweakDB:CloneRecord(
+                    TweakDBID.new(helperName),
+                    TweakDBID.new("Vehicle.VehicleDriveModelDataDefault_4w_inline3")
+                )
+            end)
+            if cloned and getRecord(helperName) then
+                local helperId = TweakDBID.new(helperName)
+                local neutral = {
+                    smoothingFactor = 1,
+                    baseAddedGravity = 0,
+                    minDriveSpeed = 0,
+                    maxDriveSpeed = 50,
+                    driveSpeedAddedGravity = 0,
+                    zVelReductionStart = 0,
+                    zVelReductionEnd = -40,
+                }
+                for flat, value in pairs(neutral) do
+                    TweakDB:SetFlat(TweakDBID.new(helperId, "." .. flat), value)
+                end
+                TweakDB:Update(helperId)
+                table.insert(updated, helperId)
+                TweakDB:SetFlat(
+                    TweakDBID.new(driveModelId, ".driveHelpers"),
+                    updated
+                )
+                TweakDB:Update(driveModelId)
+                table.insert(bikeGravityInfrastructure, {
+                    driveModelId = driveModelId,
+                    helperId = helperId,
+                    originalHelpers = original,
+                })
+                created = created + 1
+            else
+                print("[UltimateVehicleTuning] Could not clone bike gravity helper for " ..
+                    key)
+            end
+        end
+    end
+
+    if created > 0 then
+        for _, veh in ipairs(VEHICLES) do
+            if isBikeRecord(veh.id) and stock[veh.id] then
+                stock[veh.id].air_gravity_smoothing = 1
+                stock[veh.id].air_gravity_base = 0
+                stock[veh.id].air_gravity_speed_min = 0
+                stock[veh.id].air_gravity_speed_max = 50
+                stock[veh.id].air_gravity_speed_add = 0
+                stock[veh.id].air_z_reduction_start = 0
+                stock[veh.id].air_z_reduction_end = -40
+            end
+        end
+    end
+    print("[UltimateVehicleTuning] Created " .. created ..
+        " inert UVT bike gravity helpers.")
+    return created
+end
+
+local function restoreBikeGravityInfrastructure()
+    for _, entry in ipairs(bikeGravityInfrastructure) do
+        pcall(function()
+            TweakDB:SetFlat(
+                TweakDBID.new(entry.driveModelId, ".driveHelpers"),
+                entry.originalHelpers
+            )
+            TweakDB:Update(entry.driveModelId)
+            TweakDB:DeleteRecord(entry.helperId)
+        end)
+    end
+    bikeGravityInfrastructure = {}
 end
 
 local function applyCurrent(reason)
@@ -3208,13 +3442,28 @@ UVT.UI.drawGearingGroup = function()
         "Directly edit every gear parameter" or "Simplified final-drive controls")
 
     if easyGearing.advanced then
-        UVT.UI.drawGroup("INDIVIDUAL GEARS", true)
+        UVT.UI.drawGroup("INDIVIDUAL GEARS", true, true)
     else
         UVT.UI.drawEasyGearingControls()
     end
 end
 
-UVT.UI.drawGroup = function(groupName, skipHeader)
+local function shouldShowParam(def, forceAll)
+    return forceAll or showAdvanced or def.uiTier == "basic"
+end
+
+local function groupHasVisibleParams(groupName, forceAll)
+    for _, def in ipairs(PARAMS) do
+        if def.group == groupName and edit[def.key] ~= nil and
+            shouldShowParam(def, forceAll) then
+            return true
+        end
+    end
+    return false
+end
+
+UVT.UI.drawGroup = function(groupName, skipHeader, forceAll)
+    if not groupHasVisibleParams(groupName, forceAll) then return end
     if not skipHeader then
         ImGui.PushStyleColor(ImGuiCol.Header, 0.10, 0.42, 0.66, 1.0)
         ImGui.PushStyleColor(ImGuiCol.HeaderHovered, 0.14, 0.50, 0.76, 1.0)
@@ -3235,10 +3484,8 @@ UVT.UI.drawGroup = function(groupName, skipHeader)
     if activeTuneReadOnly then ImGui.BeginDisabled() end
 
     for _, def in ipairs(PARAMS) do
-        if def.group == groupName then
-            if edit[def.key] == nil then
-                ImGui.TextDisabled(def.label .. "  (not on this vehicle)")
-            else
+        if def.group == groupName and edit[def.key] ~= nil and
+            shouldShowParam(def, forceAll) then
                 local changed = isChanged(def.key)
                 local unsaved = isUnsaved(def.key)
                 local label = (unsaved and "! " or "") .. (changed and "* " or "") .. def.label
@@ -3257,6 +3504,21 @@ UVT.UI.drawGroup = function(groupName, skipHeader)
                 local value, used
                 if def.type == "bool" then
                     value, used = ImGui.Checkbox("##sl_" .. def.key, edit[def.key])
+                elseif def.type == "enum" then
+                    value = tostring(edit[def.key])
+                    used = false
+                    ImGui.SetNextItemWidth(sliderW)
+                    if ImGui.BeginCombo("##sl_" .. def.key, value) then
+                        for _, option in ipairs(def.options or {}) do
+                            local isSelected = option == value
+                            if ImGui.Selectable((isSelected and "> " or "") .. option, false) and
+                                not isSelected then
+                                value = option
+                                used = true
+                            end
+                        end
+                        ImGui.EndCombo()
+                    end
                 else
                     local lo, hi = sliderRange(def)
                     ImGui.PushItemWidth(sliderW)
@@ -3266,7 +3528,9 @@ UVT.UI.drawGroup = function(groupName, skipHeader)
                 if used then
                     edit[def.key] = value
                 end
-                if ImGui.IsItemDeactivatedAfterEdit() then
+                if def.type == "enum" and used then
+                    applyCurrent("Auto-applied")
+                elseif ImGui.IsItemDeactivatedAfterEdit() then
                     if groupName == "INDIVIDUAL GEARS" then
                         resetEasyGearBaseline(true)
                     end
@@ -3286,7 +3550,6 @@ UVT.UI.drawGroup = function(groupName, skipHeader)
                     ImGui.SetTooltip("Reset to vanilla")
                 end
                 if not canReset then ImGui.EndDisabled() end
-            end
         end
     end
 
@@ -3580,6 +3843,16 @@ UVT.UI.drawTunePanel = function()
     -- ImGui.Text("Parameters differing from Vanilla: " .. tostring(countEditedParameters()))
     -- ImGui.TextWrapped(configStatus)
 
+    if DEV_STOCK_EXPORT_ENABLED then
+        ImGui.Separator()
+        ImGui.TextDisabled("DEVELOPER")
+        if ImGui.Button("Export Stock Tune Baselines", 240, 0) then
+            exportStockTunes()
+        end
+        ImGui.SameLine()
+        ImGui.TextDisabled(DEV_STOCK_EXPORT_FILE)
+    end
+
     ImGui.Spacing()
     ImGui.Spacing()
     ImGui.Spacing()
@@ -3752,23 +4025,23 @@ UVT.UI.draw = function()
             end
 
             ImGui.Separator()
-            local advancedGroup = false
+            local advancedValue, advancedChanged =
+                ImGui.Checkbox("Show advanced parameters", showAdvanced)
+            if advancedChanged then showAdvanced = advancedValue end
+            ImGui.SameLine()
+            ImGui.TextDisabled(showAdvanced and
+                "All supported tuning controls are visible" or
+                "Showing commonly used tuning controls")
+            ImGui.Separator()
             for _, group in ipairs(GROUPS) do
-                if group == "WHEEL CONTACT MODEL" then
-                    ImGui.Separator()
-                    local advancedValue, advancedChanged = ImGui.Checkbox("Show advanced", showAdvanced)
-                    if advancedChanged then showAdvanced = advancedValue end
-                    ImGui.Separator()
-                    advancedGroup = true
-                end
-                if not advancedGroup or showAdvanced then
-                    if group == "ENGINE & GEARING" then
-                        UVT.UI.drawEngineAndGearingGroup()
-                    elseif group == "FRICTION MAP" then
+                if group == "ENGINE & GEARING" then
+                    UVT.UI.drawEngineAndGearingGroup()
+                elseif group == "FRICTION MAP" then
+                    if edit.wheels_friction_map ~= nil then
                         UVT.UI.drawFrictionMapGroup()
-                    else
-                        UVT.UI.drawGroup(group)
                     end
+                else
+                    UVT.UI.drawGroup(group)
                 end
             end
 
@@ -3820,6 +4093,7 @@ registerForEvent("onInit", function()
     addCustomTuneVehiclesToRoster()
     sortVehicleRosterByClass()
     captureSessionStock()
+    setupBikeGravityInfrastructure()
     prepareGenericTrafficDefaults()
     applySelectedTunes()
     loadVehicleTune(selected, vehicleMetadata(VEHICLES[selected].id).activeTune, true, false)
@@ -3881,6 +4155,7 @@ end)
 
 registerForEvent("onShutdown", function()
     if tdbReady and next(stock) then restoreSessionStock() end
+    restoreBikeGravityInfrastructure()
 end)
 
 registerForEvent("onOverlayOpen", function()
