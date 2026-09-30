@@ -1662,6 +1662,14 @@ end
 UVT.applyFrictionMap = function(driveModelId, params)
     local target = params and params.wheels_friction_map or nil
     if not driveModelId or type(target) ~= "string" or target == "" then return false end
+    local targetOk, targetRecord = pcall(function()
+        return TweakDB:GetRecord(TweakDBID.new(target))
+    end)
+    if not targetOk or not targetRecord then
+        table.insert(appliedList, "  wheelsFrictionMap: missing record " ..
+            target .. " [SKIPPED]")
+        return false
+    end
 
     local flatId = TweakDBID.new(driveModelId, ".wheelsFrictionMap")
     local before = vehicleIdString(TweakDB:GetFlat(flatId))
