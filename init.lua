@@ -56,7 +56,14 @@ local VEHICLES = {
     { id = "Vehicle.v_sportbike1_yaiba_kusanagi_player_02",     name = "Yaiba Kusanagi Peacekeeper",    class = "Bike" },
     { id = "Vehicle.v_sportbike1_yaiba_kusanagi_player_03",     name = "Yaiba Kusanagi Akashita",       class = "Bike" },
     -- All 16 Muramasa cosmetic configurations inherit this physics record.
-    { id = "Vehicle.v_sportbike1_yaiba_muramasa_player",        name = "Yaiba ASM-R250 Muramasa",       class = "Bike" },
+    -- The shared parent is not summonable, so use one concrete configuration
+    -- when testing it through the panel.
+    {
+        id = "Vehicle.v_sportbike1_yaiba_muramasa_player",
+        spawnId = "Vehicle.v_sportbike1_yaiba_muramasa_regular",
+        name = "Yaiba ASM-R250 Muramasa",
+        class = "Bike",
+    },
 }
 
 -- The game maintains the complete base-game/expansion garage roster in this
@@ -2796,6 +2803,11 @@ local function spawnSelectedVehicle()
         statusMessage = "The selected vehicle does not have a valid spawn record."
         return
     end
+    local spawnRecordName = veh.spawnId or veh.id
+    if not getRecord(spawnRecordName) then
+        statusMessage = "The selected vehicle does not have a valid concrete spawn record."
+        return
+    end
 
     local applied, applyErr = applyToVariants(veh, edit)
     if not applied then
@@ -2806,8 +2818,8 @@ local function spawnSelectedVehicle()
 
     pendingRespawn = {
         delay = 0,
-        recordName = veh.id,
-        vehicleType = vehicleTypeForRecord(veh.id),
+        recordName = spawnRecordName,
+        vehicleType = vehicleTypeForRecord(spawnRecordName),
         attempts = 0,
         selectedSpawn = true,
     }
