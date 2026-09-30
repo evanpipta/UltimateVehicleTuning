@@ -67,7 +67,7 @@ Vanilla vehicles often have acceleration and top-speed tuning that is conservati
 
 [*]Bikes receive substantially more rear lateral grip, revised inertia on all axes, increased maximum tilt on sport bikes, and less twitchy tilt/lean speed. An optional bike-curves archive allows bikes to lean more naturally at lower speeds.
 
-[*]Together, these changes make bikes feel much more fluid and predictable instead of stiff one moment and suddenly unstable the next. Unfortunately, bike turning radius appears to be controlled by native game code rather than the exposed tuning values. Bikes may therefore still corner more widely than they realistically should, but their overall stability and responsiveness are significantly improved.
+[*]Together, these changes make bikes feel much more fluid and predictable instead of stiff one moment and suddenly unstable the next. Testing established that bike turning radius is largely dictated by the selected wheel friction map and its referenced surface curves rather than by hard-coded bike-controller behavior. The included bike tunes therefore use selected existing car-focused friction maps to provide tighter, more controllable cornering.
 [/list]
 
 [line]
@@ -282,7 +282,15 @@ This is the most useful section for changing how cars respond at different speed
 
 If a car feels unresponsive, first examine its maximum angle, angle multipliers, and steering rates. If it is twitchy at high speed, reduce the High Angle Multiplier or move the High Threshold lower.
 
-These car steering parameters may change the visible front wheel on bikes without meaningfully changing the bike's physical turning radius.
+These steering parameters also affect bikes, but the wheel friction map and its surface curves have a much larger influence on their physical turning radius. Tune steering response and the friction map together rather than relying on steering angle alone.
+
+[size=4][b]Wheel Friction Map[/b][/size]
+
+The friction map selects a complete handling preset and its referenced asphalt, ground, and other surface curves. It can substantially change physical trajectory, turn radius, breakaway behavior, and the balance between grip and sliding; it is not merely a cosmetic or tire-grip multiplier.
+
+UVT allows car and bike maps to be cross-tested. The included bike tunes use existing car-focused maps where they produce tighter and more predictable cornering than the vanilla bike map.
+
+Custom [code]CarDrivingFrictionMap.*[/code] and [code]BikeDrivingFrictionMap.*[/code] records are also supported and are discovered automatically when present. This allows vehicle authors and advanced users to provide custom friction maps and curve sets through WolvenKit archive-based mods, then select and save them as part of a UVT tune.
 
 [size=4][b]Grip & Slip Model[/b][/size]
 
@@ -346,7 +354,7 @@ These controls affect driven-wheel slip, launch assistance, burnout behavior, an
 [*]COM offset and tilt PID values affect bike stabilization.
 [/list]
 
-Some bike lean controls are primarily visual. The game's native bike controller appears to calculate physical turning radius separately, so additional lean does not necessarily produce a tighter turn.
+Some bike lean controls primarily affect animation, body attitude, and stabilization. Additional lean alone does not necessarily produce a tighter turn because physical trajectory is influenced much more strongly by the selected friction map and its surface curves.
 
 [size=4][b]Wheel Geometry, Water, Flat Tires, and other advanced sections[/b][/size]
 
