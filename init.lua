@@ -893,6 +893,19 @@ local loadingMountedTuneApplied = false
 local genericTrafficDefaults = {}
 local genericTrafficBaselines = {}
 local bikeGravityInfrastructure = {}
+UVT.InWorldBikes = {
+    defaults = {},
+    baselines = {},
+    sources = {},
+    observedMountedRecordName = nil,
+    logFile = "UltimateVehicleTuning_InWorldBikes.log",
+    tuneSources = {
+        "Vehicle.v_sportbike1_yaiba_kusanagi_player",
+        "Vehicle.v_sportbike1_yaiba_muramasa_player",
+        "Vehicle.v_sportbike2_arch_player",
+        "Vehicle.v_sportbike3_brennan_apollo_player",
+    },
+}
 UVT.DynamicDownforce = {
     stateKey = "dynamic_downforce_enabled",
     paramKeys = {
@@ -1263,7 +1276,16 @@ local function refreshTuneFiles(vehId)
     }
     local defaultPath = tuneFilePath(vehId, MODDED_DEFAULT_TUNE .. ".json")
     local defaultData = defaultPath and loadJSON(defaultPath) or nil
-    if validTuneDocument(defaultData, vehId) then
+    if UVT.InWorldBikes.defaults[vehId] then
+        local sourceId = UVT.InWorldBikes.sources[vehId]
+        table.insert(tuneFiles, {
+            id = MODDED_DEFAULT_TUNE,
+            values = copyTbl(UVT.InWorldBikes.defaults[vehId]),
+            label = "Matching bike Modded default" ..
+                (sourceId and " (" .. friendlyVehicleName(sourceId) .. ")" or ""),
+            readOnly = true,
+        })
+    elseif validTuneDocument(defaultData, vehId) then
         table.insert(tuneFiles, {
             id = MODDED_DEFAULT_TUNE,
             file = defaultPath,
@@ -2331,6 +2353,207 @@ local function prepareGenericTrafficDefaults()
     return prepared
 end
 
+UVT.appendInWorldBikeLog = function(eventName, recordName, sourceId, detail)
+    local line = string.format(
+        "%s | %-22s | %s | source=%s | %s",
+        os.date("%Y-%m-%d %H:%M:%S"),
+        tostring(eventName or "EVENT"),
+        tostring(recordName or "<unknown>"),
+        tostring(sourceId or "<none>"),
+        tostring(detail or "")
+    )
+    pcall(function()
+        local file = io.open(UVT.InWorldBikes.logFile, "a")
+        if not file then return end
+        file:write(line, "\n")
+        file:close()
+    end)
+    print("[UltimateVehicleTuning] In-world bike: " .. line)
+end
+
+UVT.resetInWorldBikeLog = function()
+    pcall(function()
+        local file = io.open(UVT.InWorldBikes.logFile, "a")
+        if not file then return end
+        file:write("\nUltimate Vehicle Tuning - in-world spawned bike diagnostics\n")
+        file:write("Session started: ", os.date("%Y-%m-%d %H:%M:%S"), "\n")
+        file:write("Records are matched to base Kusanagi, Muramasa, ARCH, or Apollo tunes.\n")
+        file:write("PREPARE registers aliases; ATTACH/MOUNT applies the matching tune.\n\n")
+        file:close()
+    end)
+end
+
+UVT.matchingBikeDefaultSource = function(recordName)
+    if type(recordName) ~= "string" or recordName == "" or not getRecord(recordName) then
+        return nil, "missing vehicle record"
+    end
+    local lower = recordName:lower()
+    if lower:find("_player", 1, true) then return nil, "player record" end
+    for _, sourceId in ipairs(UVT.InWorldBikes.tuneSources) do
+        if lower == sourceId:lower() then return nil, "source record" end
+    end
+
+    local isArch = lower:find("hackable_arch", 1, true) or
+        lower:find("sportbike2_arch", 1, true)
+    local looksLikeBike = lower:find("kusanagi", 1, true) or
+        lower:find("muramasa", 1, true) or
+        isArch or
+        lower:find("apollo", 1, true)
+    if not looksLikeBike then return nil, "not bike-like" end
+
+    if lower:find("muramasa", 1, true) then
+        return "Vehicle.v_sportbike1_yaiba_muramasa_player", "Muramasa name fallback"
+    end
+    if lower:find("kusanagi", 1, true) then
+        return "Vehicle.v_sportbike1_yaiba_kusanagi_player", "Kusanagi name fallback"
+    end
+    if isArch then
+        return "Vehicle.v_sportbike2_arch_player", "ARCH name fallback"
+    end
+    if lower:find("apollo", 1, true) then
+        return "Vehicle.v_sportbike3_brennan_apollo_player", "Apollo name fallback"
+    end
+
+    return nil, "not a recognized bike family"
+end
+
+UVT.loadBikeDefaultValues = function(sourceId)
+    local path = tuneFilePath(sourceId, MODDED_DEFAULT_TUNE .. ".json")
+    local document = path and loadJSON(path) or nil
+    if not validTuneDocument(document, sourceId) then
+        return nil, "missing or invalid Modded default: " .. tostring(path)
+    end
+    return copyTbl(document.values)
+end
+
+UVT.registerInWorldBikeAlias = function(recordName, sourceId, matchReason)
+    local state = metadata.vehicles and metadata.vehicles[recordName] or nil
+    if type(state) == "table" and type(state.tuneIndex) == "table" and
+        #state.tuneIndex > 0 then
+        UVT.appendInWorldBikeLog(
+            "SKIP_CUSTOM_TUNES", recordName, sourceId,
+            "Record already has user-authored tunes; preserving its selection."
+        )
+        return nil, "custom tunes exist"
+    end
+
+    local index, veh = exactVehicleInRoster(recordName)
+    if not veh then index, veh = ensureVehicleInRoster(recordName) end
+    if not veh then return nil, "could not register vehicle" end
+    veh.class = "In-World Bikes"
+    veh.hidden = true
+    veh.inWorldBike = true
+
+    local baseline = UVT.InWorldBikes.baselines[recordName] or captureVehicleStock(veh)
+    if not baseline or not next(baseline) then return nil, "could not capture baseline" end
+    local values, valuesErr = UVT.loadBikeDefaultValues(sourceId)
+    if not values then return nil, valuesErr end
+
+    UVT.InWorldBikes.baselines[recordName] = copyTbl(baseline)
+    UVT.InWorldBikes.defaults[recordName] = copyTbl(values)
+    UVT.InWorldBikes.sources[recordName] = sourceId
+    stock[recordName] = copyTbl(baseline)
+    vehicleMetadata(recordName).activeTune = MODDED_DEFAULT_TUNE
+    UVT.appendInWorldBikeLog("MATCH", recordName, sourceId, matchReason)
+    return veh, nil, index
+end
+
+UVT.applyInWorldBikeDefault = function(recordName, eventName)
+    local sourceId, matchReason = UVT.matchingBikeDefaultSource(recordName)
+    if not sourceId then return false, false, matchReason end
+
+    local values = UVT.InWorldBikes.defaults[recordName]
+    if not values then
+        local veh, registerErr = UVT.registerInWorldBikeAlias(
+            recordName, sourceId, matchReason
+        )
+        if not veh then
+            UVT.appendInWorldBikeLog(
+                (eventName or "APPLY") .. "_FAILED",
+                recordName, sourceId, registerErr
+            )
+            if registerErr == "custom tunes exist" then
+                return false, false, registerErr
+            end
+            return true, false, registerErr
+        end
+        values = UVT.InWorldBikes.defaults[recordName]
+    end
+
+    local freshValues, freshErr = UVT.loadBikeDefaultValues(
+        UVT.InWorldBikes.sources[recordName] or sourceId
+    )
+    if freshValues then
+        values = freshValues
+        UVT.InWorldBikes.defaults[recordName] = copyTbl(freshValues)
+    else
+        UVT.appendInWorldBikeLog(
+            (eventName or "APPLY") .. "_RELOAD_FAILED",
+            recordName, sourceId, freshErr
+        )
+    end
+
+    local ok, err = writeVehicle(recordName, values)
+    UVT.appendInWorldBikeLog(
+        (eventName or "APPLY") .. (ok and "_OK" or "_FAILED"),
+        recordName, sourceId,
+        ok and "Applied complete matching Modded default." or tostring(err)
+    )
+    return true, ok, err
+end
+
+UVT.prepareInWorldBikeDefaults = function()
+    local ok, records = pcall(function()
+        return TweakDB:GetRecords("gamedataVehicle_Record")
+    end)
+    if not ok or type(records) ~= "table" then
+        UVT.appendInWorldBikeLog("ENUMERATE_FAILED", nil, nil, tostring(records))
+        return 0
+    end
+
+    local matches = {}
+    for _, record in ipairs(records) do
+        local idOk, recordName = pcall(function()
+            return vehicleIdString(record:GetID())
+        end)
+        if idOk then
+            local sourceId, reason = UVT.matchingBikeDefaultSource(recordName)
+            if sourceId then
+                table.insert(matches, {
+                    recordName = recordName,
+                    sourceId = sourceId,
+                    reason = reason,
+                })
+            end
+        end
+    end
+    table.sort(matches, function(a, b) return a.recordName < b.recordName end)
+
+    -- Capture all alias baselines before modifying any potentially shared record.
+    local prepared = {}
+    for _, match in ipairs(matches) do
+        local veh, err = UVT.registerInWorldBikeAlias(
+            match.recordName, match.sourceId, match.reason
+        )
+        if veh then
+            table.insert(prepared, match.recordName)
+        elseif err ~= "custom tunes exist" then
+            UVT.appendInWorldBikeLog(
+                "PREPARE_FAILED", match.recordName, match.sourceId, err
+            )
+        end
+    end
+
+    UVT.appendInWorldBikeLog(
+        "SUMMARY", nil, nil,
+        string.format(
+            "%d matched, %d registered; waiting for attach or mount to apply",
+            #matches, #prepared
+        )
+    )
+    return #prepared
+end
+
 local function captureSessionStock()
     stock = {}
     local count = 0
@@ -2543,7 +2766,12 @@ local function applyCurrent(reason)
     end
     appliedList = {}
     lastError = ""
-    local ok, err = applyToVariants(veh, edit)
+    local ok, err
+    if veh.inWorldBike then
+        ok, err = writeVehicle(veh.id, edit)
+    else
+        ok, err = applyToVariants(veh, edit)
+    end
     if ok then
         saved[veh.id] = copyTbl(edit)
         presetDirty = not tablesEqual(saved, diskSaved)
@@ -2579,7 +2807,9 @@ local function applySelectedTunes()
             print("[UltimateVehicleTuning] Preserving unavailable tune selection \"" ..
                 tostring(state.activeTune) .. "\" for " .. veh.id)
         end
-        if tune and not tune.vanilla then
+        local skipDormantAliasDefault = veh.inWorldBike and
+            tostring(tune and tune.id or ""):lower() == MODDED_DEFAULT_TUNE
+        if tune and not tune.vanilla and not skipDormantAliasDefault then
             local document = type(tune.file) == "string" and loadJSON(tune.file) or nil
             local documentValues = tune.values or
                 (type(document) == "table" and document.values or nil)
@@ -2590,7 +2820,7 @@ local function applySelectedTunes()
                 for key, value in pairs(documentValues) do params[key] = value end
                 if next(params) then
                     local ok, err
-                    if veh.genericTraffic then
+                    if veh.genericTraffic or veh.inWorldBike then
                         ok, err = writeVehicle(veh.id, documentValues)
                     else
                         ok, err = applyToVariants(veh, params)
@@ -2738,7 +2968,12 @@ local function loadVehicleTune(index, tuneId, discardDirty, applyLive)
     end
 
     if applyLive then
-        local ok, err = applyToVariants(veh, edit)
+        local ok, err
+        if veh.inWorldBike then
+            ok, err = writeVehicle(veh.id, edit)
+        else
+            ok, err = applyToVariants(veh, edit)
+        end
         if not ok then
             lastError = tostring(err or "Apply failed")
             configStatus = "Could not apply " .. tune.label
@@ -2923,7 +3158,7 @@ local function restoreSessionStock()
         local params = stock[veh.id]
         if params and next(params) then
             local ok, err
-            if veh.genericTraffic then
+            if veh.genericTraffic or veh.inWorldBike then
                 ok, err = writeVehicle(veh.id, params)
             else
                 ok, err = applyToVariants(veh, params)
@@ -3368,6 +3603,14 @@ local function applyPersistedTuneBeforeVehicleAttach(recordName)
     -- Do not reapply them here: many traffic variants share a drive-model
     -- record with a tuned player vehicle, whose more specific tune must win.
     if genericTrafficDefaults[recordName] then return true end
+    if UVT.InWorldBikes.defaults[recordName] then
+        local ok, err = writeVehicle(recordName, UVT.InWorldBikes.defaults[recordName])
+        UVT.appendInWorldBikeLog(
+            ok and "ATTACH_CACHE_OK" or "ATTACH_CACHE_FAILED",
+            recordName, UVT.InWorldBikes.sources[recordName], tostring(err or "cached values")
+        )
+        return ok
+    end
 
     local _, veh = listedVehicleForRecord(recordName)
     if not veh then return false end
@@ -3427,6 +3670,20 @@ selectMounted = function(silent, applyLive)
     local exactIndex, exactVehicle = exactVehicleInRoster(mounted)
     if exactVehicle then
         return selectMatch(exactIndex, exactVehicle, applyLive == true)
+    end
+
+    local bikeSource, bikeMatchReason = UVT.matchingBikeDefaultSource(mounted)
+    if bikeSource then
+        local recognized, applied, applyErr =
+            UVT.applyInWorldBikeDefault(mounted, "SELECT_MOUNTED")
+        local index, bikeVehicle = exactVehicleInRoster(mounted)
+        if recognized and applied and bikeVehicle then
+            return selectMatch(index, bikeVehicle, false)
+        end
+        UVT.appendInWorldBikeLog(
+            "SELECT_MOUNTED_FAILED", mounted, bikeSource,
+            tostring(applyErr or bikeMatchReason)
+        )
     end
 
     -- A mounted road vehicle is stronger evidence than a fuzzy shared-prefix
@@ -4402,6 +4659,46 @@ UVT.UI.draw = function()
     if not ok then error(err) end
 end
 
+UVT.registerVehicleAttachObserver = function()
+    local observerOk, observerErr = pcall(function()
+        Observe("VehicleObject", "OnGameAttached", function(vehicle)
+            local recordName = vehicleRecordName(vehicle)
+            if not recordName then return end
+
+            local bikeSource = UVT.matchingBikeDefaultSource(recordName)
+            if bikeSource then
+                -- CET's Observe alias runs before the observed method. Write the
+                -- complete matching tune before this entity initializes physics.
+                local recognized = UVT.applyInWorldBikeDefault(
+                    recordName, "ATTACH_BEFORE"
+                )
+                if recognized then return end
+            end
+
+            local _, listed = exactVehicleInRoster(recordName)
+            if not listed and isLikelyTrafficVehicleRecord(recordName) then
+                local _, trafficVehicle = registerGenericTrafficVehicle(recordName)
+                if trafficVehicle and ensureGenericTrafficDefault(trafficVehicle, false) then
+                    print("[UltimateVehicleTuning] Registered generic traffic default for " ..
+                        recordName)
+                end
+            end
+            applyPersistedTuneBeforeVehicleAttach(recordName)
+        end)
+    end)
+    if not observerOk then
+        print("[UltimateVehicleTuning] Could not register vehicle attach observer: " ..
+            tostring(observerErr))
+        UVT.appendInWorldBikeLog("OBSERVER_FAILED", nil, nil, tostring(observerErr))
+    else
+        UVT.appendInWorldBikeLog(
+            "OBSERVER_READY", nil, nil,
+            "VehicleObject.OnGameAttached pre-observer registered."
+        )
+    end
+    return observerOk
+end
+
 registerForEvent("onInit", function()
     resetGearDebug()
     discoverOfficialVehicles()
@@ -4415,8 +4712,11 @@ registerForEvent("onInit", function()
     local baseDocument = loadJSON(BASE_CONFIG_FILE)
     local cleanSlate = initializeTuneStorage(baseDocument)
     addCustomTuneVehiclesToRoster()
+    UVT.resetInWorldBikeLog()
+    UVT.registerVehicleAttachObserver()
     sortVehicleRosterByClass()
     captureSessionStock()
+    UVT.prepareInWorldBikeDefaults()
     setupBikeGravityInfrastructure()
     UVT.initializeDynamicDownforceInfrastructure()
     prepareGenericTrafficDefaults()
@@ -4428,26 +4728,6 @@ registerForEvent("onInit", function()
     if gameSessionActive then selectMounted(true, true) end
     if cleanSlate then
         configStatus = "Created per-vehicle Modded default tunes from config_base.json."
-    end
-
-    local vehicleObserverOk, vehicleObserverErr = pcall(function()
-        Observe("VehicleObject", "OnGameAttached", function(vehicle)
-            local recordName = vehicleRecordName(vehicle)
-            if not recordName then return end
-
-            local _, listed = exactVehicleInRoster(recordName)
-            if not listed and isLikelyTrafficVehicleRecord(recordName) then
-                local _, trafficVehicle = registerGenericTrafficVehicle(recordName)
-                if trafficVehicle and ensureGenericTrafficDefault(trafficVehicle, false) then
-                    -- print("[UltimateVehicleTuning] Registered generic traffic default for " .. recordName)
-                end
-            end
-            applyPersistedTuneBeforeVehicleAttach(recordName)
-        end)
-    end)
-    if not vehicleObserverOk then
-        print("[UltimateVehicleTuning] Could not register vehicle attach observer: " ..
-            tostring(vehicleObserverErr))
     end
 
     Observe("LoadingScreenProgressBarController", "SetProgress", function(_, progress)
@@ -4502,6 +4782,10 @@ registerForEvent("onUpdate", function(deltaTime)
     end
 
     local mounted = mountedRecordName()
+    if mounted ~= UVT.InWorldBikes.observedMountedRecordName then
+        UVT.InWorldBikes.observedMountedRecordName = mounted
+        if mounted then UVT.applyInWorldBikeDefault(mounted, "MOUNT") end
+    end
     if mounted then lastMountedRecordName = mounted end
     if ACCELERATION_TIMER_ENABLED and
         mounted ~= accelerationTimer.observedMountedVehicleId then
