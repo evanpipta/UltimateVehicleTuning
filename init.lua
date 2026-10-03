@@ -2393,8 +2393,10 @@ UVT.matchingBikeDefaultSource = function(recordName)
         if lower == sourceId:lower() then return nil, "source record" end
     end
 
-    local isArch = lower:find("hackable_arch", 1, true) or
-        lower:find("sportbike2_arch", 1, true)
+    local hackableArchPrefix = "vehicle.hackable_arch"
+    local isHackableArch = lower == hackableArchPrefix or
+        lower:sub(1, #hackableArchPrefix + 1) == hackableArchPrefix .. "_"
+    local isArch = isHackableArch or lower:find("sportbike2_arch", 1, true)
     local looksLikeBike = lower:find("kusanagi", 1, true) or
         lower:find("muramasa", 1, true) or
         isArch or
@@ -2665,7 +2667,7 @@ local function setupBikeGravityInfrastructure()
     bikeGravityInfrastructure = {}
     local driveModels = {}
     for _, veh in ipairs(VEHICLES) do
-        if isBikeRecord(veh.id) then
+        if isBikeRecord(veh.id) or veh.inWorldBike then
             local chain = resolveChain(veh.id)
             if chain and chain.dmId and not chain.helperIds.air_gravity then
                 local key = debugRecordName(chain.dmId)
@@ -2727,7 +2729,7 @@ local function setupBikeGravityInfrastructure()
 
     if created > 0 then
         for _, veh in ipairs(VEHICLES) do
-            if isBikeRecord(veh.id) and stock[veh.id] then
+            if (isBikeRecord(veh.id) or veh.inWorldBike) and stock[veh.id] then
                 stock[veh.id].air_gravity_smoothing = 1
                 stock[veh.id].air_gravity_base = 0
                 stock[veh.id].air_gravity_speed_min = 0
@@ -2736,6 +2738,18 @@ local function setupBikeGravityInfrastructure()
                 stock[veh.id].air_z_reduction_start = 0
                 stock[veh.id].air_z_reduction_end = -40
             end
+        end
+    end
+    for _, veh in ipairs(VEHICLES) do
+        if veh.inWorldBike then
+            local chain = resolveChain(veh.id)
+            local hasHelper = chain and chain.helperIds.air_gravity ~= nil
+            UVT.appendInWorldBikeLog(
+                hasHelper and "GRAVITY_HELPER_READY" or "GRAVITY_HELPER_MISSING",
+                veh.id,
+                UVT.InWorldBikes.sources[veh.id],
+                chain and debugRecordName(chain.dmId) or "drive model unresolved"
+            )
         end
     end
     print("[UltimateVehicleTuning] Created " .. created ..
