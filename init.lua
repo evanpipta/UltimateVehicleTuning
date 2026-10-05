@@ -916,6 +916,17 @@ UVT.InWorldBikes = {
 UVT.GenericWorldVehicles = {
     logFile = "UltimateVehicleTuning_GenericWorldVehicles.log",
 }
+UVT.clearDisabledDebugLogs = function()
+    if UVT.DEV_DEBUG_ENABLED then return end
+    for _, path in ipairs({
+        GEAR_DEBUG_LOG,
+        "UltimateVehicleTuning_TrafficVehicles.log",
+        UVT.InWorldBikes.logFile,
+        UVT.GenericWorldVehicles.logFile,
+    }) do
+        pcall(function() os.remove(path) end)
+    end
+end
 UVT.DynamicDownforce = {
     stateKey = "dynamic_downforce_enabled",
     paramKeys = {
@@ -961,70 +972,11 @@ local DEV_SAVE_ACCELERATION_RESULTS = false
 -- Developer switch: expose a button that writes the pre-UVT runtime baseline.
 local DEV_STOCK_EXPORT_ENABLED = false
 local DEV_STOCK_EXPORT_FILE = "stock_tunes.json"
+-- Developer switch: enable verbose attach/traffic/gear logs and the UI apply log.
+UVT.DEV_DEBUG_ENABLED = false
 local ACCELERATION_CHECKPOINTS_KPH = { 100, 150, 200, 300 }
 UVT.ACCELERATION_TIMEOUT_SECONDS = 180
-local BASE_CONFIG_FILE = "config_base.json"
 local METADATA_FILE = "metadata.json"
-
-local LEGACY_KEYS = {
-    ["Vehicle.v_sport1_quadra_turbo_r_player"] = { "Vehicle.v_sport1_quadra_turbo_r_v_tech" },
-    ["Vehicle.v_sport2_mizutani_shion_player"] = { "Vehicle.v_sport2_mizutani_shion_mz2" },
-    ["Vehicle.v_sport2_mizutani_shion_base_player"] = { "Vehicle.v_sport2_mizutani_shion" },
-    ["Vehicle.v_standard3_thorton_mackinaw_player"] = {
-        "Vehicle.v_standard3_thorton_mackinaw_mtl1",
-        "Vehicle.v_standard3_thorton_mackinaw",
-    },
-    ["Vehicle.v_standard3_thorton_mackinaw_ncu_player"] = { "Vehicle.v_standard3_thorton_mackinaw_02" },
-}
-
-local function migrateLegacyKeys(target)
-    for _, veh in ipairs(VEHICLES) do
-        local legacy = {}
-        for _, id in ipairs(LEGACY_KEYS[veh.id] or {}) do table.insert(legacy, id) end
-        local bare = veh.id:gsub("_player$", "")
-        if bare ~= veh.id then table.insert(legacy, bare) end
-        if target[veh.id] == nil then
-            for _, oldId in ipairs(legacy) do
-                if target[oldId] ~= nil then
-                    target[veh.id] = target[oldId]
-                    break
-                end
-            end
-        end
-        for _, oldId in ipairs(legacy) do target[oldId] = nil end
-    end
-end
-
-local PARAM_KEY_ALIASES = {
-    burnout_max_speed = "burnout_max_start_speed",
-    burnout_lateral_force_max_accel = "burnout_lat_accel_max",
-    burnout_lateral_force_max_speed = "burnout_lat_speed_max",
-    engine_gear_change_time = "gear_change_time",
-    engine_wheels_resistance = "wheel_resistance_ratio",
-    susp_front_swaybar_disp_limit = "front_sway_limit",
-    susp_front_swaybar_length_scalar = "front_sway_length",
-    susp_rear_swaybar_disp_limit = "rear_sway_limit",
-    susp_rear_swaybar_length_scalar = "rear_sway_length",
-    rear_grip_max_speed = "rear_helper_max_speed",
-    bike_com_damp = "bike_com_damping",
-}
-
-for gear = 1, 8 do
-    PARAM_KEY_ALIASES["gear_" .. gear .. "_torque_mul"] = "gear_" .. gear .. "_torque"
-end
-
-local function migrateParamKeys(target)
-    for _, params in pairs(target) do
-        if type(params) == "table" then
-            for oldKey, newKey in pairs(PARAM_KEY_ALIASES) do
-                if params[newKey] == nil and params[oldKey] ~= nil then
-                    params[newKey] = params[oldKey]
-                end
-                params[oldKey] = nil
-            end
-        end
-    end
-end
 
 local function copyTbl(src)
     local dst = {}
@@ -1217,10 +1169,6 @@ end
 
 local function validTuneDocument(data, vehId)
     return type(data) == "table" and data.vehicleId == vehId and type(data.values) == "table"
-end
-
-local function validPresetDocument(data)
-    return type(data) == "table" and type(data.vehicles) == "table"
 end
 
 local function vehicleMetadata(vehId)
@@ -1707,6 +1655,7 @@ local function debugRecordName(recordId)
 end
 
 local function appendGearDebug(message)
+    if not UVT.DEV_DEBUG_ENABLED then return end
     pcall(function()
         local file = io.open(GEAR_DEBUG_LOG, "a")
         if not file then return end
@@ -1717,6 +1666,7 @@ end
 
 local function resetGearDebug()
     gearRecordWriters = {}
+    if not UVT.DEV_DEBUG_ENABLED then return end
     pcall(function()
         local file = io.open(GEAR_DEBUG_LOG, "w")
         if not file then return end
@@ -1740,7 +1690,7 @@ local function captureGearMaxSpeeds(gearIds)
 end
 
 local function logBikeGearWrite(vehId, chain, params, before)
-    if not isBikeRecord(vehId) then return end
+    if not UVT.DEV_DEBUG_ENABLED or not isBikeRecord(vehId) then return end
 
     appendGearDebug(string.format(
         "VEHICLE %s | engine=%s | records=%d",
@@ -2182,10 +2132,6 @@ local function ensureVehicleInRoster(vehId)
     return #VEHICLES, veh
 end
 
-local function addPresetVehiclesToRoster(presetVehicles)
-    for vehId in pairs(presetVehicles or {}) do ensureVehicleInRoster(vehId) end
-end
-
 local function addCustomTuneVehiclesToRoster()
     for vehId, state in pairs(metadata.vehicles or {}) do
         if type(state) == "table" and type(state.tuneIndex) == "table" and
@@ -2307,6 +2253,7 @@ local function ensureGenericTrafficDefault(veh, applyNow)
 end
 
 UVT.appendGenericWorldLog = function(eventName, recordName, detail)
+    if not UVT.DEV_DEBUG_ENABLED then return end
     local line = string.format(
         "%s | %-20s | %s | %s",
         os.date("%Y-%m-%d %H:%M:%S"),
@@ -2329,6 +2276,7 @@ UVT.isGenericWorldVehicleCandidate = function(recordName)
     end
     local lower = recordName:lower()
     if lower:find("_player", 1, true) then return false, "player record" end
+    if lower:find("^vehicle%.av_") then return false, "aerial or scripted transit record" end
     if UVT.matchingBikeDefaultSource and UVT.matchingBikeDefaultSource(recordName) then
         return false, "bike family"
     end
@@ -2420,22 +2368,25 @@ local function prepareGenericTrafficDefaults()
         end
     end
 
-    pcall(function()
-        local file = io.open(TRAFFIC_VEHICLE_LOG, "w")
-        if not file then return end
-        file:write("Non-player road-vehicle records in the installed TweakDB\n")
-        file:write("APPLIED marks records receiving the hidden generic Modded default.\n\n")
-        for _, vehId in ipairs(ids) do
-            file:write(genericTrafficDefaults[vehId] and "APPLIED " or "FAILED  ", vehId, "\n")
-        end
-        file:close()
-    end)
+    if UVT.DEV_DEBUG_ENABLED then
+        pcall(function()
+            local file = io.open(TRAFFIC_VEHICLE_LOG, "w")
+            if not file then return end
+            file:write("Non-player road-vehicle records in the installed TweakDB\n")
+            file:write("APPLIED marks records receiving the hidden generic Modded default.\n\n")
+            for _, vehId in ipairs(ids) do
+                file:write(genericTrafficDefaults[vehId] and "APPLIED " or "FAILED  ", vehId, "\n")
+            end
+            file:close()
+        end)
+    end
     print("[UltimateVehicleTuning] Prepared hidden generic defaults for " .. prepared ..
         " non-player road vehicles (" .. failed .. " unreadable/failed).")
     return prepared
 end
 
 UVT.appendInWorldBikeLog = function(eventName, recordName, sourceId, detail)
+    if not UVT.DEV_DEBUG_ENABLED then return end
     local line = string.format(
         "%s | %-22s | %s | source=%s | %s",
         os.date("%Y-%m-%d %H:%M:%S"),
@@ -2454,6 +2405,7 @@ UVT.appendInWorldBikeLog = function(eventName, recordName, sourceId, detail)
 end
 
 UVT.resetInWorldBikeLog = function()
+    if not UVT.DEV_DEBUG_ENABLED then return end
     pcall(function()
         local file = io.open(UVT.InWorldBikes.logFile, "a")
         if not file then return end
@@ -2957,13 +2909,9 @@ local function applySelectedTunes()
         " vehicles, " .. errors .. " errors")
 end
 
-local function initializeTuneStorage(baseDocument)
-    local baseVehicles = validPresetDocument(baseDocument) and copyVehicleMap(baseDocument.vehicles) or {}
-    migrateLegacyKeys(baseVehicles)
-    migrateParamKeys(baseVehicles)
-    addPresetVehiclesToRoster(baseVehicles)
-
-    local cleanSlate = metadata.version ~= 2 or type(metadata.vehicles) ~= "table"
+local function initializeTuneStorage()
+    local cleanSlate = metadata.version ~= 2 or
+        type(metadata.vehicles) ~= "table" or next(metadata.vehicles) == nil
     local autoSaveExplicit = metadata.autoSaveExplicit == true
     local priorAutoSave = autoSaveExplicit and metadata.autoSave == true or false
     if cleanSlate then
@@ -2981,23 +2929,10 @@ local function initializeTuneStorage(baseDocument)
     autoSave = priorAutoSave
 
     for _, veh in ipairs(VEHICLES) do
-        local values = baseVehicles[veh.id]
-        local hasDefault = false
-        if values and ensureVehicleTuneDirectory(veh.id) then
-            local path = tuneFilePath(veh.id, MODDED_DEFAULT_TUNE .. ".json")
-            if path then
-                local document = { version = 1, vehicleId = veh.id, values = values }
-                local existing = loadJSON(path)
-                local existingValues = type(existing) == "table" and existing.values or nil
-                if not validTuneDocument(existing, veh.id) or
-                    type(existingValues) ~= "table" or not tablesEqual(existingValues, values) then
-                    saveJSON(path, document)
-                end
-                hasDefault = validTuneDocument(loadJSON(path), veh.id)
-            end
-        end
         local state = vehicleMetadata(veh.id)
         if cleanSlate then
+            local path = tuneFilePath(veh.id, MODDED_DEFAULT_TUNE .. ".json")
+            local hasDefault = validTuneDocument(path and loadJSON(path) or nil, veh.id)
             state.activeTune = hasDefault and MODDED_DEFAULT_TUNE or VANILLA_TUNE
             state.tuneIndex = {}
         end
@@ -3752,8 +3687,10 @@ local function applyPersistedTuneBeforeVehicleAttach(recordName)
             veh.id .. ": " .. tostring(err))
         return false
     end
-    print("[UltimateVehicleTuning] Preloaded " .. tostring(state.activeTune) ..
-        " before attaching " .. veh.id)
+    if UVT.DEV_DEBUG_ENABLED then
+        print("[UltimateVehicleTuning] Preloaded " .. tostring(state.activeTune) ..
+            " before attaching " .. veh.id)
+    end
     return true
 end
 
@@ -4748,7 +4685,7 @@ UVT.UI.draw = function()
                 end
             end
 
-            if #appliedList > 0 then
+            if UVT.DEV_DEBUG_ENABLED and #appliedList > 0 then
                 ImGui.Separator()
                 if ImGui.CollapsingHeader("Apply log") then
                     for _, entry in ipairs(appliedList) do
@@ -4801,8 +4738,10 @@ UVT.registerVehicleAttachObserver = function()
             if not listed and isLikelyTrafficVehicleRecord(recordName) then
                 local _, trafficVehicle = registerGenericTrafficVehicle(recordName)
                 if trafficVehicle and ensureGenericTrafficDefault(trafficVehicle, true) then
-                    print("[UltimateVehicleTuning] Registered generic traffic default for " ..
-                        recordName)
+                    if UVT.DEV_DEBUG_ENABLED then
+                        print("[UltimateVehicleTuning] Registered generic traffic default for " ..
+                            recordName)
+                    end
                     return
                 end
             end
@@ -4833,6 +4772,7 @@ UVT.registerVehicleAttachObserver = function()
 end
 
 registerForEvent("onInit", function()
+    UVT.clearDisabledDebugLogs()
     resetGearDebug()
     discoverOfficialVehicles()
     UVT.discoverFrictionMaps()
@@ -4842,8 +4782,7 @@ registerForEvent("onInit", function()
         metadata = loadedMetadata
     end
     removeLegacyGenericTrafficMetadata()
-    local baseDocument = loadJSON(BASE_CONFIG_FILE)
-    local cleanSlate = initializeTuneStorage(baseDocument)
+    local cleanSlate = initializeTuneStorage()
     addCustomTuneVehiclesToRoster()
     UVT.resetInWorldBikeLog()
     UVT.appendGenericWorldLog(
@@ -4864,7 +4803,7 @@ registerForEvent("onInit", function()
     tdbReady = true
     if gameSessionActive then selectMounted(true, true) end
     if cleanSlate then
-        configStatus = "Created per-vehicle Modded default tunes from config_base.json."
+        configStatus = "Initialized bundled per-vehicle tune selections."
     end
 
     Observe("LoadingScreenProgressBarController", "SetProgress", function(_, progress)
