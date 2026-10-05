@@ -753,10 +753,10 @@ local HELPER_SPECS = {
     { "downforce", "DOWNFORCE & AIR CONTROL", "ground_factor", "Maximum Ground Factor", "maxSpeedFactorGround", "%.2f", 0, 20 },
     { "downforce", "DOWNFORCE & AIR CONTROL", "air_factor", "Maximum Air Factor", "maxSpeedFactorAir", "%.2f", 0, 20 },
     { "air", "DOWNFORCE & AIR CONTROL", "gravity_smoothing", "In-Air Smoothing", "smoothingFactor", "%.2f", 0, 20 },
-    { "air", "DOWNFORCE & AIR CONTROL", "gravity_base", "Base Added Gravity", "baseAddedGravity", "%.2f", -20, 20 },
+    { "air", "DOWNFORCE & AIR CONTROL", "gravity_base", "Base Added Gravity", "baseAddedGravity", "%.2f", -5, 5 },
     { "air", "DOWNFORCE & AIR CONTROL", "gravity_speed_min", "Gravity Minimum Drive Speed", "minDriveSpeed", "%.1f m/s", 0, 200 },
     { "air", "DOWNFORCE & AIR CONTROL", "gravity_speed_max", "Gravity Maximum Drive Speed", "maxDriveSpeed", "%.1f m/s", 0, 300 },
-    { "air", "DOWNFORCE & AIR CONTROL", "gravity_speed_add", "Drive-Speed Added Gravity", "driveSpeedAddedGravity", "%.2f", -20, 20 },
+    { "air", "DOWNFORCE & AIR CONTROL", "gravity_speed_add", "Drive-Speed Added Gravity", "driveSpeedAddedGravity", "%.2f", -5, 5 },
     { "air", "DOWNFORCE & AIR CONTROL", "z_reduction_start", "Vertical Reduction Start", "zVelReductionStart", "%.2f m/s", -100, 100 },
     { "air", "DOWNFORCE & AIR CONTROL", "z_reduction_end", "Vertical Reduction End", "zVelReductionEnd", "%.2f m/s", -100, 100 },
 }
