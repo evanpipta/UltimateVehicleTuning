@@ -962,6 +962,7 @@ local DEV_SAVE_ACCELERATION_RESULTS = false
 local DEV_STOCK_EXPORT_ENABLED = false
 local DEV_STOCK_EXPORT_FILE = "stock_tunes.json"
 local ACCELERATION_CHECKPOINTS_KPH = { 100, 150, 200, 300 }
+UVT.ACCELERATION_TIMEOUT_SECONDS = 180
 local BASE_CONFIG_FILE = "config_base.json"
 local METADATA_FILE = "metadata.json"
 
@@ -3534,13 +3535,13 @@ local function updateAccelerationTimer(deltaTime)
         end
     end
 
-    local finalCheckpoint = ACCELERATION_CHECKPOINTS_KPH[#ACCELERATION_CHECKPOINTS_KPH]
-    if accelerationTimer.times[finalCheckpoint] ~= nil then
+    if accelerationTimer.elapsed >= UVT.ACCELERATION_TIMEOUT_SECONDS then
+        accelerationTimer.elapsed = UVT.ACCELERATION_TIMEOUT_SECONDS
         accelerationTimer.active = false
-        local savedOk, saveErr, resultsSaved = saveAccelerationResult("300 km/h reached")
+        local savedOk, saveErr, resultsSaved = saveAccelerationResult("3 minute timeout")
         accelerationTimer.status = savedOk and
-            (resultsSaved and "Complete - results saved" or "Complete") or
-            ("Complete - save failed: " .. tostring(saveErr))
+            (resultsSaved and "Timed out - results saved" or "Timed out") or
+            ("Timed out - save failed: " .. tostring(saveErr))
     end
 end
 
@@ -4597,10 +4598,9 @@ UVT.UI.drawAccelerationTimer = function()
     ImGui.TextDisabled("ACCELERATION STOPWATCH")
     ImGui.SameLine()
     ImGui.Text(accelerationTimer.status)
+    ImGui.TextDisabled("Runs until manually stopped or the 3-minute timeout.")
 
-    local finalCheckpoint = ACCELERATION_CHECKPOINTS_KPH[#ACCELERATION_CHECKPOINTS_KPH]
-    local canStart = not accelerationTimer.active and
-        accelerationTimer.times[finalCheckpoint] == nil
+    local canStart = not accelerationTimer.active
     if not canStart then ImGui.BeginDisabled() end
     if ImGui.Button("Start##acceleration_timer", 100, 0) then
         startAccelerationTimer()
