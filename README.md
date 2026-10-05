@@ -166,7 +166,7 @@ NPC traffic variants and police vehicles are not all included in the game's norm
 
 The generated fallback improves steering response, uses safe speed-sensitive steering values, reduces and bounds weight transfer, sets turning roll to 0.65, and sets roll inertia to the midpoint of each vehicle's stock pitch and yaw inertia. These records stay hidden from the normal vehicle list; a mounted traffic vehicle can still be inspected as using "Generic modded default." Verbose traffic and vehicle-attach diagnostics are disabled by default and are only intended for development troubleshooting.
 
-The Settings tab includes separate default-on options for traffic vehicles and static in-world vehicles such as quest, encounter, and hackable vehicles. Disable either option and reload CET mods or restart the game if non-player tuning causes compatibility or loading-time issues. Vehicles in V's call list are unaffected by these settings.
+The Settings tab includes separate default-on options for automatically applying generic/default tunes to traffic vehicles and static in-world vehicles such as quest, encounter, and hackable vehicles. Disable either option and reload CET mods or restart the game if non-player tuning causes compatibility or loading-time issues. Disabled categories can still be selected with Use Current Vehicle, inspected by record ID, and tuned manually. Vehicles in V's call list are unaffected by these settings.
 
 ### Creating and editing a custom tune
 

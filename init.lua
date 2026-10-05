@@ -2850,10 +2850,6 @@ end
 local function applyCurrent(reason)
     local veh = currentVeh()
     if not veh then return end
-    if not UVT.nonPlayerTuningEnabledForVehicle(veh) then
-        configStatus = "Non-player tuning is disabled for this vehicle category."
-        return
-    end
     if activeTuneReadOnly then
         configStatus = "Read-only tune. Use Save As before editing."
         return
@@ -2893,45 +2889,46 @@ local function applySelectedTunes()
     local count = 0
     local errors = 0
     for _, veh in ipairs(VEHICLES) do
-        if UVT.nonPlayerTuningEnabledForVehicle(veh) then
-            local state = vehicleMetadata(veh.id)
-            refreshTuneFiles(veh.id)
-            local tune = findTune(state.activeTune)
-            if not tune then
-                errors = errors + 1
-                print("[UltimateVehicleTuning] Preserving unavailable tune selection \"" ..
-                    tostring(state.activeTune) .. "\" for " .. veh.id)
-            end
-            local skipDormantAliasDefault = veh.inWorldBike and
-                tostring(tune and tune.id or ""):lower() == MODDED_DEFAULT_TUNE
-            if tune and not tune.vanilla and not skipDormantAliasDefault then
-                local document = type(tune.file) == "string" and loadJSON(tune.file) or nil
-                local documentValues = tune.values or
-                    (type(document) == "table" and document.values or nil)
-                local documentVehicleId = tune.values and veh.id or
-                    (type(document) == "table" and document.vehicleId or nil)
-                if type(documentValues) == "table" and documentVehicleId == veh.id then
-                    local params = copyTbl(stock[veh.id] or {})
-                    for key, value in pairs(documentValues) do params[key] = value end
-                    if next(params) then
-                        local ok, err
-                        if veh.genericTraffic or veh.inWorldBike then
-                            ok, err = writeVehicle(veh.id, documentValues)
-                        else
-                            ok, err = applyToVariants(veh, params)
-                        end
-                        if ok then
-                            count = count + 1
-                        else
-                            errors = errors + 1
-                            lastError = tostring(err)
-                        end
+        local state = vehicleMetadata(veh.id)
+        refreshTuneFiles(veh.id)
+        local tune = findTune(state.activeTune)
+        if not tune then
+            errors = errors + 1
+            print("[UltimateVehicleTuning] Preserving unavailable tune selection \"" ..
+                tostring(state.activeTune) .. "\" for " .. veh.id)
+        end
+        local isDefault = tostring(tune and tune.id or ""):lower() == MODDED_DEFAULT_TUNE
+        local skipDormantAliasDefault = veh.inWorldBike and isDefault
+        local skipDisabledNonPlayerDefault =
+            isDefault and not UVT.nonPlayerTuningEnabledForVehicle(veh)
+        if tune and not tune.vanilla and not skipDormantAliasDefault and
+            not skipDisabledNonPlayerDefault then
+            local document = type(tune.file) == "string" and loadJSON(tune.file) or nil
+            local documentValues = tune.values or
+                (type(document) == "table" and document.values or nil)
+            local documentVehicleId = tune.values and veh.id or
+                (type(document) == "table" and document.vehicleId or nil)
+            if type(documentValues) == "table" and documentVehicleId == veh.id then
+                local params = copyTbl(stock[veh.id] or {})
+                for key, value in pairs(documentValues) do params[key] = value end
+                if next(params) then
+                    local ok, err
+                    if veh.genericTraffic or veh.inWorldBike then
+                        ok, err = writeVehicle(veh.id, documentValues)
+                    else
+                        ok, err = applyToVariants(veh, params)
                     end
-                else
-                    errors = errors + 1
-                    print("[UltimateVehicleTuning] Invalid selected tune \"" ..
-                        tostring(state.activeTune) .. "\" for " .. veh.id)
+                    if ok then
+                        count = count + 1
+                    else
+                        errors = errors + 1
+                        lastError = tostring(err)
+                    end
                 end
+            else
+                errors = errors + 1
+                print("[UltimateVehicleTuning] Invalid selected tune \"" ..
+                    tostring(state.activeTune) .. "\" for " .. veh.id)
             end
         end
     end
@@ -3053,10 +3050,6 @@ local function loadVehicleTune(index, tuneId, discardDirty, applyLive)
     end
 
     if applyLive then
-        if not UVT.nonPlayerTuningEnabledForVehicle(veh) then
-            configStatus = "Non-player tuning is disabled for this vehicle category."
-            return false
-        end
         local ok, err
         if veh.inWorldBike then
             ok, err = writeVehicle(veh.id, edit)
@@ -3706,10 +3699,13 @@ local function applyPersistedTuneBeforeVehicleAttach(recordName)
 
     local _, veh = listedVehicleForRecord(recordName)
     if not veh then return false end
-    if not UVT.nonPlayerTuningEnabledForVehicle(veh) then return false end
 
     local state = vehicleMetadata(veh.id)
     if state.activeTune:lower() == VANILLA_TUNE then return true end
+    if state.activeTune:lower() == MODDED_DEFAULT_TUNE and
+        not UVT.nonPlayerTuningEnabledForVehicle(veh) then
+        return false
+    end
 
     local filename
     if state.activeTune:lower() == MODDED_DEFAULT_TUNE then
@@ -3764,19 +3760,38 @@ selectMounted = function(silent, applyLive)
     -- into an earlier base model that happens to share the same ID prefix.
     local exactIndex, exactVehicle = exactVehicleInRoster(mounted)
     if exactVehicle then
-        local shouldApply = applyLive == true and
+        local state = vehicleMetadata(exactVehicle.id)
+        local isAutomaticDefault =
+            tostring(state.activeTune or ""):lower() == MODDED_DEFAULT_TUNE
+        local shouldApply = applyLive == true and (
+            not isAutomaticDefault or
             UVT.nonPlayerTuningEnabledForVehicle(exactVehicle)
+        )
         return selectMatch(exactIndex, exactVehicle, shouldApply)
     end
 
     local mountedIsTraffic = isLikelyTrafficVehicleRecord(mounted)
     if mountedIsTraffic and not UVT.trafficTuningEnabled() then
-        if not silent then statusMessage = "Traffic vehicle tuning is disabled." end
+        local index, trafficVehicle = registerGenericTrafficVehicle(mounted)
+        if trafficVehicle then
+            return selectMatch(index, trafficVehicle, false)
+        end
+        if not silent then statusMessage = "Could not inspect the mounted traffic vehicle." end
         return false
     end
     if not mountedIsTraffic and not UVT.staticWorldTuningEnabled() and
         not mounted:lower():find("_player", 1, true) then
-        if not silent then statusMessage = "Static in-world vehicle tuning is disabled." end
+        local index, worldVehicle = ensureVehicleInRoster(mounted)
+        if worldVehicle then
+            worldVehicle.class = "Static In-World Vehicles"
+            worldVehicle.hidden = true
+            worldVehicle.genericWorldVehicle = true
+            captureVehicleStock(worldVehicle)
+            return selectMatch(index, worldVehicle, false)
+        end
+        if not silent then
+            statusMessage = "Could not inspect the mounted static in-world vehicle."
+        end
         return false
     end
 
@@ -4700,6 +4715,9 @@ UVT.UI.drawVehiclePanel = function()
 
     ImGui.SameLine()
     if ImGui.Button("Use Current Vehicle", 180, 0) then selectMounted() end
+    if veh then
+        ImGui.TextDisabled("Record ID: " .. tostring(veh.id))
+    end
 
     -- if veh and activeTuneId == VANILLA_TUNE then
     --     ImGui.Text("This vehicle currently uses the live Vanilla baseline.")
@@ -4812,7 +4830,8 @@ UVT.UI.drawSettingsTab = function()
 
     ImGui.TextWrapped(
         "Changes are saved immediately. Use Reload All Mods or restart the game after " ..
-        "changing either option so previously modified shared records are restored."
+        "changing either option so previously modified shared records are restored. " ..
+        "Disabled vehicles can still be inspected and tuned manually with Use Current Vehicle."
     )
     if configStatus ~= "" then
         ImGui.TextDisabled(configStatus)
