@@ -103,6 +103,8 @@ try {
         version = 2
         autoSave = $false
         autoSaveExplicit = $false
+        applyTrafficVehicles = $true
+        applyStaticWorldVehicles = $true
         vehicles = $releaseVehicles
     }
     $releaseMetadataJson = $releaseMetadata |

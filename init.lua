@@ -978,6 +978,23 @@ local ACCELERATION_CHECKPOINTS_KPH = { 100, 150, 200, 300 }
 UVT.ACCELERATION_TIMEOUT_SECONDS = 180
 local METADATA_FILE = "metadata.json"
 
+UVT.trafficTuningEnabled = function()
+    return metadata.applyTrafficVehicles ~= false
+end
+
+UVT.staticWorldTuningEnabled = function()
+    return metadata.applyStaticWorldVehicles ~= false
+end
+
+UVT.nonPlayerTuningEnabledForVehicle = function(veh)
+    if not veh then return true end
+    if veh.inWorldBike or veh.genericWorldVehicle then
+        return UVT.staticWorldTuningEnabled()
+    end
+    if veh.genericTraffic then return UVT.trafficTuningEnabled() end
+    return true
+end
+
 local function copyTbl(src)
     local dst = {}
     if not src then return dst end
@@ -2234,6 +2251,7 @@ end
 
 local function ensureGenericTrafficDefault(veh, applyNow)
     if not veh then return false end
+    if not UVT.nonPlayerTuningEnabledForVehicle(veh) then return false end
     local baseline = genericTrafficBaselines[veh.id] or captureVehicleStock(veh)
     if not baseline or not next(baseline) then return false end
     local values = genericTrafficDefaults[veh.id] or genericTrafficTuneValues(baseline)
@@ -2277,6 +2295,7 @@ UVT.isGenericWorldVehicleCandidate = function(recordName)
     local lower = recordName:lower()
     if lower:find("_player", 1, true) then return false, "player record" end
     if lower:find("^vehicle%.av_") then return false, "aerial or scripted transit record" end
+    if isLikelyTrafficVehicleRecord(recordName) then return false, "traffic record" end
     if UVT.matchingBikeDefaultSource and UVT.matchingBikeDefaultSource(recordName) then
         return false, "bike family"
     end
@@ -2298,6 +2317,9 @@ UVT.isGenericWorldVehicleCandidate = function(recordName)
 end
 
 UVT.applyGenericWorldVehicleDefault = function(recordName, eventName)
+    if not UVT.staticWorldTuningEnabled() then
+        return false, false, "static in-world tuning disabled"
+    end
     local candidate, reason = UVT.isGenericWorldVehicleCandidate(recordName)
     if not candidate then return false, false, reason end
 
@@ -2326,6 +2348,7 @@ UVT.applyGenericWorldVehicleDefault = function(recordName, eventName)
 end
 
 local function prepareGenericTrafficDefaults()
+    if not UVT.trafficTuningEnabled() then return 0 end
     local ok, records = pcall(function()
         return TweakDB:GetRecords("gamedataVehicle_Record")
     end)
@@ -2510,6 +2533,9 @@ UVT.registerInWorldBikeAlias = function(recordName, sourceId, matchReason)
 end
 
 UVT.applyInWorldBikeDefault = function(recordName, eventName)
+    if not UVT.staticWorldTuningEnabled() then
+        return false, false, "static in-world tuning disabled"
+    end
     local sourceId, matchReason = UVT.matchingBikeDefaultSource(recordName)
     if not sourceId then return false, false, matchReason end
 
@@ -2554,6 +2580,7 @@ UVT.applyInWorldBikeDefault = function(recordName, eventName)
 end
 
 UVT.prepareInWorldBikeDefaults = function()
+    if not UVT.staticWorldTuningEnabled() then return 0 end
     local ok, records = pcall(function()
         return TweakDB:GetRecords("gamedataVehicle_Record")
     end)
@@ -2823,6 +2850,10 @@ end
 local function applyCurrent(reason)
     local veh = currentVeh()
     if not veh then return end
+    if not UVT.nonPlayerTuningEnabledForVehicle(veh) then
+        configStatus = "Non-player tuning is disabled for this vehicle category."
+        return
+    end
     if activeTuneReadOnly then
         configStatus = "Read-only tune. Use Save As before editing."
         return
@@ -2862,43 +2893,45 @@ local function applySelectedTunes()
     local count = 0
     local errors = 0
     for _, veh in ipairs(VEHICLES) do
-        local state = vehicleMetadata(veh.id)
-        refreshTuneFiles(veh.id)
-        local tune = findTune(state.activeTune)
-        if not tune then
-            errors = errors + 1
-            print("[UltimateVehicleTuning] Preserving unavailable tune selection \"" ..
-                tostring(state.activeTune) .. "\" for " .. veh.id)
-        end
-        local skipDormantAliasDefault = veh.inWorldBike and
-            tostring(tune and tune.id or ""):lower() == MODDED_DEFAULT_TUNE
-        if tune and not tune.vanilla and not skipDormantAliasDefault then
-            local document = type(tune.file) == "string" and loadJSON(tune.file) or nil
-            local documentValues = tune.values or
-                (type(document) == "table" and document.values or nil)
-            local documentVehicleId = tune.values and veh.id or
-                (type(document) == "table" and document.vehicleId or nil)
-            if type(documentValues) == "table" and documentVehicleId == veh.id then
-                local params = copyTbl(stock[veh.id] or {})
-                for key, value in pairs(documentValues) do params[key] = value end
-                if next(params) then
-                    local ok, err
-                    if veh.genericTraffic or veh.inWorldBike then
-                        ok, err = writeVehicle(veh.id, documentValues)
-                    else
-                        ok, err = applyToVariants(veh, params)
-                    end
-                    if ok then
-                        count = count + 1
-                    else
-                        errors = errors + 1
-                        lastError = tostring(err)
-                    end
-                end
-            else
+        if UVT.nonPlayerTuningEnabledForVehicle(veh) then
+            local state = vehicleMetadata(veh.id)
+            refreshTuneFiles(veh.id)
+            local tune = findTune(state.activeTune)
+            if not tune then
                 errors = errors + 1
-                print("[UltimateVehicleTuning] Invalid selected tune \"" ..
+                print("[UltimateVehicleTuning] Preserving unavailable tune selection \"" ..
                     tostring(state.activeTune) .. "\" for " .. veh.id)
+            end
+            local skipDormantAliasDefault = veh.inWorldBike and
+                tostring(tune and tune.id or ""):lower() == MODDED_DEFAULT_TUNE
+            if tune and not tune.vanilla and not skipDormantAliasDefault then
+                local document = type(tune.file) == "string" and loadJSON(tune.file) or nil
+                local documentValues = tune.values or
+                    (type(document) == "table" and document.values or nil)
+                local documentVehicleId = tune.values and veh.id or
+                    (type(document) == "table" and document.vehicleId or nil)
+                if type(documentValues) == "table" and documentVehicleId == veh.id then
+                    local params = copyTbl(stock[veh.id] or {})
+                    for key, value in pairs(documentValues) do params[key] = value end
+                    if next(params) then
+                        local ok, err
+                        if veh.genericTraffic or veh.inWorldBike then
+                            ok, err = writeVehicle(veh.id, documentValues)
+                        else
+                            ok, err = applyToVariants(veh, params)
+                        end
+                        if ok then
+                            count = count + 1
+                        else
+                            errors = errors + 1
+                            lastError = tostring(err)
+                        end
+                    end
+                else
+                    errors = errors + 1
+                    print("[UltimateVehicleTuning] Invalid selected tune \"" ..
+                        tostring(state.activeTune) .. "\" for " .. veh.id)
+                end
             end
         end
     end
@@ -2926,6 +2959,12 @@ local function initializeTuneStorage()
     end
     metadata.autoSave = priorAutoSave
     metadata.autoSaveExplicit = autoSaveExplicit
+    if type(metadata.applyTrafficVehicles) ~= "boolean" then
+        metadata.applyTrafficVehicles = true
+    end
+    if type(metadata.applyStaticWorldVehicles) ~= "boolean" then
+        metadata.applyStaticWorldVehicles = true
+    end
     autoSave = priorAutoSave
 
     for _, veh in ipairs(VEHICLES) do
@@ -3014,6 +3053,10 @@ local function loadVehicleTune(index, tuneId, discardDirty, applyLive)
     end
 
     if applyLive then
+        if not UVT.nonPlayerTuningEnabledForVehicle(veh) then
+            configStatus = "Non-player tuning is disabled for this vehicle category."
+            return false
+        end
         local ok, err
         if veh.inWorldBike then
             ok, err = writeVehicle(veh.id, edit)
@@ -3648,8 +3691,11 @@ local function applyPersistedTuneBeforeVehicleAttach(recordName)
     -- Hidden traffic defaults are applied once before the normal player tunes.
     -- Do not reapply them here: many traffic variants share a drive-model
     -- record with a tuned player vehicle, whose more specific tune must win.
-    if genericTrafficDefaults[recordName] then return true end
+    if genericTrafficDefaults[recordName] then
+        return UVT.trafficTuningEnabled()
+    end
     if UVT.InWorldBikes.defaults[recordName] then
+        if not UVT.staticWorldTuningEnabled() then return false end
         local ok, err = writeVehicle(recordName, UVT.InWorldBikes.defaults[recordName])
         UVT.appendInWorldBikeLog(
             ok and "ATTACH_CACHE_OK" or "ATTACH_CACHE_FAILED",
@@ -3660,6 +3706,7 @@ local function applyPersistedTuneBeforeVehicleAttach(recordName)
 
     local _, veh = listedVehicleForRecord(recordName)
     if not veh then return false end
+    if not UVT.nonPlayerTuningEnabledForVehicle(veh) then return false end
 
     local state = vehicleMetadata(veh.id)
     if state.activeTune:lower() == VANILLA_TUNE then return true end
@@ -3717,10 +3764,26 @@ selectMounted = function(silent, applyLive)
     -- into an earlier base model that happens to share the same ID prefix.
     local exactIndex, exactVehicle = exactVehicleInRoster(mounted)
     if exactVehicle then
-        return selectMatch(exactIndex, exactVehicle, applyLive == true)
+        local shouldApply = applyLive == true and
+            UVT.nonPlayerTuningEnabledForVehicle(exactVehicle)
+        return selectMatch(exactIndex, exactVehicle, shouldApply)
     end
 
-    local bikeSource, bikeMatchReason = UVT.matchingBikeDefaultSource(mounted)
+    local mountedIsTraffic = isLikelyTrafficVehicleRecord(mounted)
+    if mountedIsTraffic and not UVT.trafficTuningEnabled() then
+        if not silent then statusMessage = "Traffic vehicle tuning is disabled." end
+        return false
+    end
+    if not mountedIsTraffic and not UVT.staticWorldTuningEnabled() and
+        not mounted:lower():find("_player", 1, true) then
+        if not silent then statusMessage = "Static in-world vehicle tuning is disabled." end
+        return false
+    end
+
+    local bikeSource, bikeMatchReason
+    if UVT.staticWorldTuningEnabled() then
+        bikeSource, bikeMatchReason = UVT.matchingBikeDefaultSource(mounted)
+    end
     if bikeSource then
         local recognized, applied, applyErr =
             UVT.applyInWorldBikeDefault(mounted, "SELECT_MOUNTED")
@@ -3736,15 +3799,18 @@ selectMounted = function(silent, applyLive)
 
     -- A mounted road vehicle is stronger evidence than a fuzzy shared-prefix
     -- match. Give an unknown traffic variant its own generic default first.
-    if isLikelyTrafficVehicleRecord(mounted) then
+    if UVT.trafficTuningEnabled() and mountedIsTraffic then
         local index, trafficVehicle = registerGenericTrafficVehicle(mounted)
         if trafficVehicle and ensureGenericTrafficDefault(trafficVehicle, false) then
             return selectMatch(index, trafficVehicle, false)
         end
     end
 
-    local recognized, applied, applyErr, index =
-        UVT.applyGenericWorldVehicleDefault(mounted, "SELECT_MOUNTED")
+    local recognized, applied, applyErr, index = false, false, nil, nil
+    if UVT.staticWorldTuningEnabled() then
+        recognized, applied, applyErr, index =
+            UVT.applyGenericWorldVehicleDefault(mounted, "SELECT_MOUNTED")
+    end
     if recognized then
         local _, worldVehicle = exactVehicleInRoster(mounted)
         if applied and worldVehicle then
@@ -4643,66 +4709,138 @@ UVT.UI.drawVehiclePanel = function()
     -- ImGui.TextWrapped(statusMessage)
 end
 
+UVT.UI.drawEditorTab = function()
+    if not tdbReady then
+        ImGui.TextWrapped("Waiting for TweakDB... reload CET mods after the session has started.")
+        return
+    end
+
+    ImGui.Separator()
+    UVT.UI.drawVehiclePanel()
+    ImGui.Separator()
+    UVT.UI.drawTunePanel()
+
+    if lastError ~= "" then
+        ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.25, 0.15, 1.0)
+        ImGui.TextWrapped(lastError)
+        ImGui.PopStyleColor()
+    end
+
+    ImGui.Separator()
+    local advancedValue, advancedChanged =
+        ImGui.Checkbox("Show advanced parameters", showAdvanced)
+    if advancedChanged then showAdvanced = advancedValue end
+    ImGui.SameLine()
+    ImGui.TextDisabled(showAdvanced and
+        "All supported tuning controls are visible" or
+        "Showing commonly used tuning controls")
+    ImGui.Separator()
+    for _, group in ipairs(GROUPS) do
+        if group == "ENGINE & GEARING" then
+            UVT.UI.drawEngineAndGearingGroup()
+        elseif group == "FRICTION MAP" then
+            if edit.wheels_friction_map ~= nil then
+                UVT.UI.drawFrictionMapGroup()
+            end
+        elseif group == "DOWNFORCE & AIR CONTROL" then
+            UVT.UI.drawDownforceAndAirControlGroup()
+        else
+            UVT.UI.drawGroup(group)
+        end
+    end
+
+    if UVT.DEV_DEBUG_ENABLED and #appliedList > 0 then
+        ImGui.Separator()
+        if ImGui.CollapsingHeader("Apply log") then
+            for _, entry in ipairs(appliedList) do
+                if entry:find("%[OK%]") then
+                    ImGui.PushStyleColor(ImGuiCol.Text, 0.0, 1.0, 0.53, 1.0)
+                    ImGui.Text(entry)
+                    ImGui.PopStyleColor()
+                elseif entry:find("%[MISS%]") then
+                    ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.3, 0.3, 1.0)
+                    ImGui.Text(entry)
+                    ImGui.PopStyleColor()
+                else
+                    ImGui.Text(entry)
+                end
+            end
+        end
+    end
+end
+
+UVT.UI.drawSettingsTab = function()
+    ImGui.Separator()
+    ImGui.TextDisabled("GLOBAL SETTINGS")
+
+    ImGui.Spacing()
+    ImGui.Separator()
+    ImGui.Spacing()
+
+    local trafficValue, trafficChanged = ImGui.Checkbox(
+        "Apply generic tunes to traffic vehicles",
+        UVT.trafficTuningEnabled()
+    )
+    if trafficChanged then
+        metadata.applyTrafficVehicles = trafficValue
+        local savedOk, saveErr = persistMetadata()
+        if savedOk then
+            configStatus = "Traffic vehicle setting saved. Reload all mods to apply it fully."
+        else
+            lastError = "Could not save traffic vehicle setting: " .. tostring(saveErr)
+        end
+    end
+    ImGui.Spacing()
+
+    local staticValue, staticChanged = ImGui.Checkbox(
+        "Apply generic tunes to static in-world vehicles (includes quest-related vehicles, vehicles parked at ncpd scanner hustles, etc.)",
+        UVT.staticWorldTuningEnabled()
+    )
+    if staticChanged then
+        metadata.applyStaticWorldVehicles = staticValue
+        local savedOk, saveErr = persistMetadata()
+        if savedOk then
+            configStatus = "Static in-world vehicle setting saved. Reload all mods to apply it fully."
+        else
+            lastError = "Could not save static in-world vehicle setting: " .. tostring(saveErr)
+        end
+    end
+
+    ImGui.Spacing()
+    ImGui.Separator()
+    ImGui.Spacing()
+
+    ImGui.TextWrapped(
+        "Changes are saved immediately. Use Reload All Mods or restart the game after " ..
+        "changing either option so previously modified shared records are restored."
+    )
+    if configStatus ~= "" then
+        ImGui.TextDisabled(configStatus)
+    end
+    if lastError ~= "" then
+        ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.25, 0.15, 1.0)
+        ImGui.TextWrapped(lastError)
+        ImGui.PopStyleColor()
+    end
+end
+
 UVT.UI.draw = function()
     ImGui.SetNextWindowSize(720, 820, ImGuiCond.FirstUseEver)
     UVT.UI.pushWindowStyle()
     local ok, err = pcall(function()
     if ImGui.Begin("Ultimate Vehicle Tuning") then
-        if not tdbReady then
-            ImGui.TextWrapped("Waiting for TweakDB... reload CET mods after the session has started.")
-        else
-            ImGui.Separator()
-            UVT.UI.drawVehiclePanel()
-            ImGui.Separator()
-            UVT.UI.drawTunePanel()
-
-            if lastError ~= "" then
-                ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.25, 0.15, 1.0)
-                ImGui.TextWrapped(lastError)
-                ImGui.PopStyleColor()
+        if ImGui.BeginTabBar("##uvt_main_tabs") then
+            ImGui.SetNextItemWidth(200)
+            if ImGui.BeginTabItem("Editor") then
+                UVT.UI.drawEditorTab()
+                ImGui.EndTabItem()
             end
-
-            ImGui.Separator()
-            local advancedValue, advancedChanged =
-                ImGui.Checkbox("Show advanced parameters", showAdvanced)
-            if advancedChanged then showAdvanced = advancedValue end
-            ImGui.SameLine()
-            ImGui.TextDisabled(showAdvanced and
-                "All supported tuning controls are visible" or
-                "Showing commonly used tuning controls")
-            ImGui.Separator()
-            for _, group in ipairs(GROUPS) do
-                if group == "ENGINE & GEARING" then
-                    UVT.UI.drawEngineAndGearingGroup()
-                elseif group == "FRICTION MAP" then
-                    if edit.wheels_friction_map ~= nil then
-                        UVT.UI.drawFrictionMapGroup()
-                    end
-                elseif group == "DOWNFORCE & AIR CONTROL" then
-                    UVT.UI.drawDownforceAndAirControlGroup()
-                else
-                    UVT.UI.drawGroup(group)
-                end
+            ImGui.SetNextItemWidth(200)
+            if ImGui.BeginTabItem("Settings") then
+                UVT.UI.drawSettingsTab()
+                ImGui.EndTabItem()
             end
-
-            if UVT.DEV_DEBUG_ENABLED and #appliedList > 0 then
-                ImGui.Separator()
-                if ImGui.CollapsingHeader("Apply log") then
-                    for _, entry in ipairs(appliedList) do
-                        if entry:find("%[OK%]") then
-                            ImGui.PushStyleColor(ImGuiCol.Text, 0.0, 1.0, 0.53, 1.0)
-                            ImGui.Text(entry)
-                            ImGui.PopStyleColor()
-                        elseif entry:find("%[MISS%]") then
-                            ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.3, 0.3, 1.0)
-                            ImGui.Text(entry)
-                            ImGui.PopStyleColor()
-                        else
-                            ImGui.Text(entry)
-                        end
-                    end
-                end
-            end
+            ImGui.EndTabBar()
         end
     end
     end)
@@ -4724,7 +4862,8 @@ UVT.registerVehicleAttachObserver = function()
             local recordName = vehicleRecordName(vehicle)
             if not recordName then return end
 
-            local bikeSource = UVT.matchingBikeDefaultSource(recordName)
+            local bikeSource = UVT.staticWorldTuningEnabled() and
+                UVT.matchingBikeDefaultSource(recordName) or nil
             if bikeSource then
                 -- CET's Observe alias runs before the observed method. Write the
                 -- complete matching tune before this entity initializes physics.
@@ -4735,7 +4874,9 @@ UVT.registerVehicleAttachObserver = function()
             end
 
             local _, listed = exactVehicleInRoster(recordName)
-            if not listed and isLikelyTrafficVehicleRecord(recordName) then
+            local recordIsTraffic = isLikelyTrafficVehicleRecord(recordName)
+            if UVT.trafficTuningEnabled() and not listed and
+                recordIsTraffic then
                 local _, trafficVehicle = registerGenericTrafficVehicle(recordName)
                 if trafficVehicle and ensureGenericTrafficDefault(trafficVehicle, true) then
                     if UVT.DEV_DEBUG_ENABLED then
@@ -4746,14 +4887,26 @@ UVT.registerVehicleAttachObserver = function()
                 end
             end
 
-            local recognized, _, genericReason = UVT.applyGenericWorldVehicleDefault(
-                recordName, "ATTACH_BEFORE"
-            )
+            local recognized, genericReason = false, "static in-world tuning disabled"
+            if UVT.staticWorldTuningEnabled() then
+                local candidateRecognized, _, candidateReason =
+                    UVT.applyGenericWorldVehicleDefault(
+                    recordName, "ATTACH_BEFORE"
+                )
+                recognized = candidateRecognized
+                genericReason = candidateReason
+            end
             if recognized then return end
             if not listed and genericReason ~= "bike family" then
                 UVT.appendGenericWorldLog(
                     "ATTACH_SKIPPED", recordName, tostring(genericReason)
                 )
+            end
+            if not listed and (
+                (recordIsTraffic and not UVT.trafficTuningEnabled()) or
+                (not recordIsTraffic and not UVT.staticWorldTuningEnabled())
+            ) then
+                return
             end
             applyPersistedTuneBeforeVehicleAttach(recordName)
         end)
@@ -4787,7 +4940,9 @@ registerForEvent("onInit", function()
     UVT.resetInWorldBikeLog()
     UVT.appendGenericWorldLog(
         "SESSION_START", nil,
-        "Catch-all enabled for non-player wheeled vehicles outside the garage call list."
+        UVT.staticWorldTuningEnabled() and
+            "Catch-all enabled for non-player wheeled vehicles outside the garage call list." or
+            "Static in-world vehicle tuning disabled."
     )
     UVT.registerVehicleAttachObserver()
     sortVehicleRosterByClass()
@@ -4860,7 +5015,7 @@ registerForEvent("onUpdate", function(deltaTime)
     local mounted = mountedRecordName()
     if mounted ~= UVT.InWorldBikes.observedMountedRecordName then
         UVT.InWorldBikes.observedMountedRecordName = mounted
-        if mounted then
+        if mounted and UVT.staticWorldTuningEnabled() then
             local bikeRecognized = UVT.applyInWorldBikeDefault(mounted, "MOUNT")
             if not bikeRecognized then
                 UVT.applyGenericWorldVehicleDefault(mounted, "MOUNT")
